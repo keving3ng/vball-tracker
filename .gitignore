@@ -2,3 +2,7 @@ node_modules/
 dist/
 .env
 .next/
+data/
+*.db
+*.db-shm
+*.db-wal

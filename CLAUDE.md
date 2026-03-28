@@ -36,7 +36,7 @@ src/
 ```
 PARTIFUL_REFRESH_TOKEN=   # Firebase refresh token for Partiful auth
 FIREBASE_API_KEY=         # Firebase API key (AIzaSy...)
-DATA_DIR=.                # Directory for vball.db (use /data in Docker)
+DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 ```
 
 `.env` is gitignored. See `.env.example`.
