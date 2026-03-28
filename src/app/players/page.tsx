@@ -18,7 +18,10 @@ export default function PlayersPage() {
 
   useEffect(() => {
     fetch('/api/players')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Failed to load players: ${r.status}`);
+        return r.json();
+      })
       .then(setPlayers)
       .finally(() => setLoading(false));
   }, []);
