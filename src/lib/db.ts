@@ -103,10 +103,10 @@ export const queries = {
       p.userId,
       p.name,
       COUNT(a.eventId) as totalRuns,
-      SUM(a.attended) as attended,
-      SUM(CASE WHEN pay.paid = 1 THEN 1 ELSE 0 END) as paidRuns,
-      SUM(CASE WHEN pay.paid = 0 AND pay.amount > 0 THEN 1 ELSE 0 END) as owingRuns,
-      SUM(CASE WHEN pay.paid = 0 THEN pay.amount ELSE 0 END) as totalOwing
+      COALESCE(SUM(a.attended), 0) as attended,
+      COALESCE(SUM(CASE WHEN pay.paid = 1 THEN 1 ELSE 0 END), 0) as paidRuns,
+      COALESCE(SUM(CASE WHEN pay.paid = 0 AND pay.amount > 0 THEN 1 ELSE 0 END), 0) as owingRuns,
+      COALESCE(SUM(CASE WHEN pay.paid = 0 THEN pay.amount ELSE 0 END), 0) as totalOwing
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
