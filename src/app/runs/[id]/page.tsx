@@ -32,20 +32,23 @@ export default function RunPage({ params }: { params: { id: string } }) {
   const sync = useCallback(async () => {
     setSyncing(true);
     // Upsert run metadata from Partiful events list
-    const runsData = await fetch('/api/runs').then(r => r.json());
-    const all = [...runsData.upcoming, ...runsData.past];
-    const event = all.find((e: any) => e.id === params.id);
-    if (event) {
-      await fetch(`/api/runs/${params.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: event.title, startDate: event.startDate }),
-      });
+    try {
+      const runsData = await fetch('/api/runs').then(r => r.json());
+      const all = [...runsData.upcoming, ...runsData.past];
+      const event = all.find((e: any) => e.id === params.id);
+      if (event) {
+        await fetch(`/api/runs/${params.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: event.title, startDate: event.startDate }),
+        });
+      }
+      await fetch(`/api/runs/${params.id}/sync`, { method: 'POST' });
+      const res = await fetch(`/api/runs/${params.id}`);
+      if (res.ok) setRun(await res.json());
+    } finally {
+      setSyncing(false);
     }
-    await fetch(`/api/runs/${params.id}/sync`, { method: 'POST' });
-    const res = await fetch(`/api/runs/${params.id}`);
-    if (res.ok) setRun(await res.json());
-    setSyncing(false);
   }, [params.id]);
 
   const load = useCallback(async () => {
