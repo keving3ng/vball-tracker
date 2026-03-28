@@ -30,8 +30,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.title) {
     queries.upsertRun.run({ eventId: params.id, title: body.title, startDate: body.startDate ?? null });
   }
-  if (body.capacity !== undefined || body.costPerHead !== undefined) {
-    queries.updateRunSettings.run({ eventId: params.id, capacity: body.capacity ?? null, costPerHead: body.costPerHead ?? null });
+  if (body.totalCost !== undefined || body.splitCount !== undefined) {
+    queries.updateRunCost.run({ eventId: params.id, totalCost: body.totalCost ?? null, splitCount: body.splitCount ?? 12 });
   }
   return NextResponse.json({ ok: true });
 }
