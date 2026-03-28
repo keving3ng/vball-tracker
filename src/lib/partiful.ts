@@ -100,7 +100,10 @@ async function firestoreBatchGet(docPaths: string[]) {
     },
     body: JSON.stringify({ documents }),
   });
-  if (!res.ok) throw new Error(`firestoreBatchGet → ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`firestoreBatchGet → ${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
+  }
   return res.json();
 }
 
@@ -116,7 +119,10 @@ async function firestoreQuery(collectionPath: string, query: Record<string, unkn
     },
     body: JSON.stringify({ structuredQuery: query }),
   });
-  if (!res.ok) throw new Error(`firestoreQuery → ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`firestoreQuery → ${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
+  }
   return res.json();
 }
 
