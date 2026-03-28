@@ -8,18 +8,25 @@ interface CalRun { id: string; title: string; startDate: string }
 
 export default function CalendarPage() {
   const [runs, setRuns] = useState<CalRun[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth()); // 0-indexed
 
   useEffect(() => {
     fetch('/api/runs')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Failed to load runs: ${r.status}`);
+        return r.json();
+      })
       .then(data => {
         const all = [...data.upcoming, ...data.past];
         setRuns(all.filter((e: any) => e.startDate).map((e: any) => ({
           id: e.id, title: e.title, startDate: e.startDate,
         })));
-      });
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
   }, []);
 
   const prevMonth = () => {
@@ -62,6 +69,9 @@ export default function CalendarPage() {
   }
 
   const todayStr = new Date().toISOString().slice(0, 10);
+
+  if (loading) return <p className="text-muted-foreground">Loading...</p>;
+  if (error) return <p className="text-destructive">Error: {error}</p>;
 
   return (
     <div className="space-y-4">
