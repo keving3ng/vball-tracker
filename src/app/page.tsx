@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -21,7 +20,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetch('/api/runs')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Failed to load runs: ${r.status}`);
+        return r.json();
+      })
       .then(data => { setUpcoming(data.upcoming); setPast(data.past); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
@@ -42,7 +44,8 @@ export default function Dashboard() {
         </div>
       </div>
       <div>
-        <h1 className="text-2xl font-bold mb-4">Past Runs</h1>
+        <h2 className="text-2xl font-bold mb-4">Past Runs</h2>
+        {past.length === 0 && <p className="text-muted-foreground">No past runs.</p>}
         <div className="grid gap-3">
           {past.slice(0, 10).map(event => (
             <EventCard key={event.id} event={event} />
