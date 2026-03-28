@@ -1,12 +1,7 @@
 import { deserializeGuest, type Guest } from './firestore';
+import { getValidToken } from './auth';
 
 const BASE_URL = 'https://api.partiful.com';
-
-function getToken(): string {
-  const token = process.env.PARTIFUL_AUTH_TOKEN;
-  if (!token) throw new Error('PARTIFUL_AUTH_TOKEN not set in .env');
-  return token;
-}
 
 function decodeUserId(token: string): string {
   const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
@@ -14,7 +9,7 @@ function decodeUserId(token: string): string {
 }
 
 async function post(endpoint: string, params: Record<string, unknown> = {}) {
-  const token = getToken();
+  const token = await getValidToken();
   const userId = decodeUserId(token);
 
   const res = await fetch(`${BASE_URL}/${endpoint}`, {
@@ -58,7 +53,7 @@ export async function getEventPermission(eventId: string) {
 }
 
 export async function getContacts() {
-  const token = getToken();
+  const token = await getValidToken();
   const res = await fetch(`${BASE_URL}/getContacts`, {
     method: 'POST',
     headers: {
@@ -90,7 +85,7 @@ export async function getUsers(ids: string[]) {
 const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects/getpartiful/databases/(default)/documents';
 
 async function firestoreBatchGet(docPaths: string[]) {
-  const token = getToken();
+  const token = await getValidToken();
   const documents = docPaths.map(p => `projects/getpartiful/databases/(default)/documents/${p}`);
   const res = await fetch(`${FIRESTORE_BASE}:batchGet`, {
     method: 'POST',
@@ -107,7 +102,7 @@ async function firestoreBatchGet(docPaths: string[]) {
 }
 
 async function firestoreQuery(collectionPath: string, query: Record<string, unknown>) {
-  const token = getToken();
+  const token = await getValidToken();
   const res = await fetch(`${FIRESTORE_BASE}/${collectionPath}:runQuery`, {
     method: 'POST',
     headers: {
@@ -123,7 +118,7 @@ async function firestoreQuery(collectionPath: string, query: Record<string, unkn
 }
 
 export async function getMyUserDoc() {
-  const userId = decodeUserId(getToken());
+  const userId = decodeUserId(await getValidToken());
   return firestoreBatchGet([`users/${userId}`]);
 }
 
