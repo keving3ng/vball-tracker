@@ -274,7 +274,7 @@ function GuestRow({
   onRecord: (userId: string, amountOwed: number, amountPaid: number | null) => void;
   dim?: boolean;
 }) {
-  const amountOwed = guest.payment?.amount || costPerHead;
+  const amountOwed = guest.payment?.amount ?? costPerHead;
   const isPaid = guest.payment?.amountPaid != null;
   return (
     <div className={`flex items-center justify-between px-4 py-2 rounded-lg border ${dim ? 'opacity-50' : ''}`}>
@@ -303,7 +303,7 @@ function PaymentRow({
 }) {
   const [editingAmount, setEditingAmount] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
-  const amountOwed = guest.payment?.amount || costPerHead;
+  const amountOwed = guest.payment?.amount ?? costPerHead;
   const amountPaid = guest.payment?.amountPaid;
   const isPaid = guest.payment?.amountPaid != null;
 
@@ -364,6 +364,10 @@ function CostSection({
   const [editing, setEditing] = useState(false);
   const [cost, setCost] = useState(String(totalCost ?? ''));
   const [split, setSplit] = useState(String(splitCount));
+  useEffect(() => {
+    setCost(String(totalCost ?? ''));
+    setSplit(String(splitCount));
+  }, [totalCost, splitCount]);
   const costPerHead = totalCost != null ? (totalCost / splitCount).toFixed(2) : null;
 
   if (!editing) return (
