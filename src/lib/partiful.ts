@@ -71,7 +71,10 @@ export async function getContacts() {
       },
     }),
   });
-  if (!res.ok) throw new Error(`getContacts → ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`getContacts → ${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
+  }
   return res.json();
 }
 
