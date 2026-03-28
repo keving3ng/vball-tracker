@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 interface PlayerStats {
   userId: string;
   name: string;
+  displayName: string | null;
   totalRuns: number;
-  paidRuns: number;
-  owingRuns: number;
-  totalOwing: number;
+  balance: number;
 }
 
 export default function PlayersPage() {
@@ -36,17 +36,33 @@ export default function PlayersPage() {
             <tr>
               <th className="text-left px-4 py-2 font-medium">Player</th>
               <th className="text-center px-4 py-2 font-medium">Runs</th>
-              <th className="text-center px-4 py-2 font-medium">Owing</th>
+              <th className="text-center px-4 py-2 font-medium">Balance</th>
             </tr>
           </thead>
           <tbody>
             {players.map((p, i) => (
-              <tr key={p.userId} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
-                <td className="px-4 py-2 font-medium">{p.name}</td>
+              <tr
+                key={p.userId}
+                className={`cursor-pointer hover:bg-muted/50 ${i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}`}
+              >
+                <td className="px-4 py-2">
+                  <Link href={`/players/${p.userId}`} className="block font-medium hover:underline">
+                    {p.displayName ?? p.name}
+                    {p.displayName && (
+                      <span className="ml-1 text-xs text-muted-foreground">({p.name})</span>
+                    )}
+                  </Link>
+                </td>
                 <td className="px-4 py-2 text-center">{p.totalRuns}</td>
                 <td className="px-4 py-2 text-center">
-                  {p.totalOwing > 0 ? (
-                    <span className="text-destructive font-medium">${p.totalOwing.toFixed(2)}</span>
+                  {p.balance < 0 ? (
+                    <span className="text-destructive font-medium">
+                      ${Math.abs(p.balance).toFixed(2)} owed
+                    </span>
+                  ) : p.balance > 0 ? (
+                    <span className="text-green-600 font-medium">
+                      ${p.balance.toFixed(2)} credit
+                    </span>
                   ) : '—'}
                 </td>
               </tr>
