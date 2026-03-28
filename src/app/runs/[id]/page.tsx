@@ -151,7 +151,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
   const maybe = run.guests.filter(g => g.rsvpStatus === 'MAYBE');
   const waitlist = run.guests.filter(g => g.rsvpStatus === 'WAITLIST');
   const other = run.guests.filter(g => !['GOING', 'MAYBE', 'WAITLIST'].includes(g.rsvpStatus));
-  const paid = going.filter(g => g.payment?.paid);
+  const paid = going.filter(g => g.payment?.amountPaid != null);
   const costPerHead = run.costPerHead ?? 0;
 
   return (
@@ -275,7 +275,7 @@ function GuestRow({
   dim?: boolean;
 }) {
   const amountOwed = guest.payment?.amount || costPerHead;
-  const isPaid = guest.payment?.paid;
+  const isPaid = guest.payment?.amountPaid != null;
   return (
     <div className={`flex items-center justify-between px-4 py-2 rounded-lg border ${dim ? 'opacity-50' : ''}`}>
       <div className="flex items-center gap-3">
@@ -305,7 +305,7 @@ function PaymentRow({
   const [customAmount, setCustomAmount] = useState('');
   const amountOwed = guest.payment?.amount || costPerHead;
   const amountPaid = guest.payment?.amountPaid;
-  const isPaid = guest.payment?.paid;
+  const isPaid = guest.payment?.amountPaid != null;
 
   return (
     <div className="flex items-center justify-between px-4 py-2 rounded-lg border">
