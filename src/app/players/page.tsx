@@ -6,7 +6,6 @@ interface PlayerStats {
   userId: string;
   name: string;
   totalRuns: number;
-  attended: number;
   paidRuns: number;
   owingRuns: number;
   totalOwing: number;
@@ -36,9 +35,7 @@ export default function PlayersPage() {
           <thead className="bg-muted text-muted-foreground">
             <tr>
               <th className="text-left px-4 py-2 font-medium">Player</th>
-              <th className="text-center px-4 py-2 font-medium">Runs RSVPd</th>
-              <th className="text-center px-4 py-2 font-medium">Attended</th>
-              <th className="text-center px-4 py-2 font-medium">Show Rate</th>
+              <th className="text-center px-4 py-2 font-medium">Runs</th>
               <th className="text-center px-4 py-2 font-medium">Owing</th>
             </tr>
           </thead>
@@ -47,12 +44,6 @@ export default function PlayersPage() {
               <tr key={p.userId} className={i % 2 === 0 ? 'bg-background' : 'bg-muted/30'}>
                 <td className="px-4 py-2 font-medium">{p.name}</td>
                 <td className="px-4 py-2 text-center">{p.totalRuns}</td>
-                <td className="px-4 py-2 text-center">{p.attended}</td>
-                <td className="px-4 py-2 text-center">
-                  {p.totalRuns > 0
-                    ? `${Math.round((p.attended / p.totalRuns) * 100)}%`
-                    : '—'}
-                </td>
                 <td className="px-4 py-2 text-center">
                   {p.totalOwing > 0 ? (
                     <span className="text-destructive font-medium">${p.totalOwing.toFixed(2)}</span>

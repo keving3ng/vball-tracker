@@ -18,7 +18,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         userId: r.userId,
         name: r.name,
         rsvpStatus: r.rsvpStatus,
-        attended: Boolean(r.attended),
         payment: { amount: r.amount, paid: Boolean(r.paid), method: r.method, note: r.note },
       })),
   };

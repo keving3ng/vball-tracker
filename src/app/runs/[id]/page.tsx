@@ -10,7 +10,6 @@ interface Guest {
   userId: string;
   name: string;
   rsvpStatus: string;
-  attended: boolean;
   payment: { amount: number; paid: boolean; method: string | null; note: string | null };
 }
 
@@ -64,18 +63,6 @@ export default function RunPage({ params }: { params: { id: string } }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleAttended = async (userId: string, attended: boolean) => {
-    await fetch(`/api/runs/${params.id}/attendance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId, attended }),
-    });
-    setRun(prev => prev ? {
-      ...prev,
-      guests: prev.guests.map(g => g.userId === userId ? { ...g, attended } : g),
-    } : prev);
-  };
-
   const togglePaid = async (userId: string, paid: boolean, amount: number) => {
     await fetch(`/api/runs/${params.id}/payments`, {
       method: 'POST',
@@ -94,7 +81,6 @@ export default function RunPage({ params }: { params: { id: string } }) {
   if (!run) return <p className="text-destructive">Run not found</p>;
 
   const going = run.guests.filter(g => g.rsvpStatus === 'GOING');
-  const attended = going.filter(g => g.attended);
   const paid = going.filter(g => g.payment?.paid);
   const costPerHead = run.costPerHead ?? 0;
 
@@ -116,9 +102,8 @@ export default function RunPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         <StatCard label="Going" value={`${going.length}${run.capacity ? ` / ${run.capacity}` : ''}`} />
-        <StatCard label="Attended" value={`${attended.length} / ${going.length}`} />
         <StatCard label="Paid" value={`${paid.length} / ${going.length}`} />
       </div>
 
@@ -133,11 +118,12 @@ export default function RunPage({ params }: { params: { id: string } }) {
             <GuestRow
               key={guest.userId}
               guest={guest}
-              onToggleAttended={toggleAttended}
+              costPerHead={costPerHead}
+              onTogglePaid={togglePaid}
             />
           ))}
           {run.guests.filter(g => g.rsvpStatus !== 'GOING').map(guest => (
-            <GuestRow key={guest.userId} guest={guest} onToggleAttended={toggleAttended} dim />
+            <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onTogglePaid={togglePaid} dim />
           ))}
         </TabsContent>
 
@@ -185,12 +171,14 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 function GuestRow({
-  guest, onToggleAttended, dim
+  guest, costPerHead, onTogglePaid, dim
 }: {
   guest: Guest;
-  onToggleAttended: (userId: string, attended: boolean) => void;
+  costPerHead: number;
+  onTogglePaid: (userId: string, paid: boolean, amount: number) => void;
   dim?: boolean;
 }) {
+  const amount = guest.payment?.amount || costPerHead;
   return (
     <div className={`flex items-center justify-between px-4 py-2 rounded-lg border ${dim ? 'opacity-50' : ''}`}>
       <div className="flex items-center gap-3">
@@ -198,11 +186,11 @@ function GuestRow({
         <RsvpBadge status={guest.rsvpStatus} />
       </div>
       <Button
-        variant={guest.attended ? 'default' : 'outline'}
+        variant={guest.payment?.paid ? 'default' : 'outline'}
         size="sm"
-        onClick={() => onToggleAttended(guest.userId, !guest.attended)}
+        onClick={() => onTogglePaid(guest.userId, !guest.payment?.paid, amount)}
       >
-        {guest.attended ? '✓ Attended' : 'Mark Attended'}
+        {guest.payment?.paid ? '✓ Paid' : 'Mark Paid'}
       </Button>
     </div>
   );

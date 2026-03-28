@@ -47,7 +47,7 @@ db.exec(`
 
 export interface Player { userId: string; name: string }
 export interface Run { eventId: string; title: string; startDate: string | null; capacity: number | null; costPerHead: number | null; syncedAt: string | null }
-export interface AttendanceRow { eventId: string; userId: string; rsvpStatus: string; attended: boolean }
+export interface AttendanceRow { eventId: string; userId: string; rsvpStatus: string }
 export interface PaymentRow { eventId: string; userId: string; amount: number; paid: boolean; method: string | null; note: string | null }
 
 export const queries = {
@@ -73,10 +73,6 @@ export const queries = {
     ON CONFLICT(eventId, userId) DO UPDATE SET rsvpStatus=excluded.rsvpStatus
   `),
 
-  setAttended: db.prepare(`
-    UPDATE attendance SET attended=@attended WHERE eventId=@eventId AND userId=@userId
-  `),
-
   upsertPayment: db.prepare(`
     INSERT INTO payments (eventId, userId, amount, paid, method, note)
     VALUES (@eventId, @userId, @amount, @paid, @method, @note)
@@ -87,7 +83,7 @@ export const queries = {
   getRunWithGuests: db.prepare(`
     SELECT
       r.*,
-      a.userId, a.rsvpStatus, a.attended,
+      a.userId, a.rsvpStatus,
       p.name,
       pay.amount, pay.paid, pay.method, pay.note
     FROM runs r
@@ -103,7 +99,6 @@ export const queries = {
       p.userId,
       p.name,
       COUNT(a.eventId) as totalRuns,
-      COALESCE(SUM(a.attended), 0) as attended,
       COALESCE(SUM(CASE WHEN pay.paid = 1 THEN 1 ELSE 0 END), 0) as paidRuns,
       COALESCE(SUM(CASE WHEN pay.paid = 0 AND pay.amount > 0 THEN 1 ELSE 0 END), 0) as owingRuns,
       COALESCE(SUM(CASE WHEN pay.paid = 0 THEN pay.amount ELSE 0 END), 0) as totalOwing
@@ -111,7 +106,7 @@ export const queries = {
     LEFT JOIN attendance a ON a.userId = p.userId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
     GROUP BY p.userId
-    ORDER BY attended DESC, totalRuns DESC
+    ORDER BY totalRuns DESC
   `),
 };
 
