@@ -52,11 +52,20 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     });
   }
   if (body.totalCost !== undefined || body.splitCount !== undefined) {
+    const newTotalCost: number | null = body.totalCost ?? null;
+    const newSplitCount: number = body.splitCount ?? 12;
     queries.updateRunCost.run({
       eventId: params.id,
-      totalCost: body.totalCost ?? null,
-      splitCount: body.splitCount ?? 12,
+      totalCost: newTotalCost,
+      splitCount: newSplitCount,
     });
+    if (newTotalCost != null && newTotalCost > 0) {
+      const amountOwed = newTotalCost / newSplitCount;
+      const going = queries.getGoingAttendance.all(params.id) as { userId: string }[];
+      for (const a of going) {
+        queries.upsertPaymentOwed.run({ eventId: params.id, userId: a.userId, amount: amountOwed });
+      }
+    }
   }
   if (body.notes !== undefined) {
     queries.updateRunNotes.run({ eventId: params.id, notes: body.notes });

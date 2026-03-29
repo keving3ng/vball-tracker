@@ -32,6 +32,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
   const [nameVal, setNameVal] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesVal, setNotesVal] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/players/${params.id}`);
@@ -82,13 +83,15 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
     });
   };
 
-  const copyReminder = () => {
+  const copyReminder = async () => {
     if (!player) return;
     const name = player.displayName ?? player.name;
     const owed = Math.abs(player.balance).toFixed(2);
     const runCount = player.runs.filter(r => !r.paid).length;
     const msg = `Hey ${name}, you owe $${owed} from ${runCount} run${runCount !== 1 ? 's' : ''}. Venmo/e-transfer whenever!`;
-    navigator.clipboard.writeText(msg);
+    await navigator.clipboard.writeText(msg);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
@@ -149,7 +152,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           </p>
           {player.balance < 0 && (
             <Button size="sm" variant="outline" onClick={copyReminder}>
-              Copy reminder
+              {copied ? 'Copied!' : 'Copy reminder'}
             </Button>
           )}
         </div>
