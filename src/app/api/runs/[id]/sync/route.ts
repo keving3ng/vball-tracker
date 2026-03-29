@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getEventGuests } from 'partiful-api';
+import { getEventGuests } from '@keg/partiful-api';
 import { queries } from '@/lib/db';
 
 export async function POST(_req: Request, { params }: { params: { id: string } }) {

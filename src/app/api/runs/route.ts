@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUpcomingEvents, getPastEvents } from 'partiful-api';
+import { getUpcomingEvents, getPastEvents } from '@keg/partiful-api';
 
 const VBALL_RE = /vball|volley|🏐/i;
 

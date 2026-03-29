@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { getCreatedEvents, getUpcomingEvents, getPastEvents, getEventPermission, getContacts, getMyUserDoc, getEventGuests } from 'partiful-api';
+import { getCreatedEvents, getUpcomingEvents, getPastEvents, getEventPermission, getContacts, getMyUserDoc, getEventGuests } from '@keg/partiful-api';
 
 const EVENT_ID = process.argv[2];
 
