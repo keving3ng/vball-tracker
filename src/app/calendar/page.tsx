@@ -70,6 +70,14 @@ export default function CalendarPage() {
 
   const todayStr = new Date().toISOString().slice(0, 10);
 
+  // Mobile: runs in current month sorted by date
+  const monthRuns = runs
+    .filter(r => {
+      const d = new Date(r.startDate);
+      return d.getFullYear() === year && d.getMonth() === month;
+    })
+    .sort((a, b) => a.startDate.localeCompare(b.startDate));
+
   if (loading) return <p className="text-muted-foreground">Loading...</p>;
   if (error) return <p className="text-destructive">Error: {error}</p>;
 
@@ -84,7 +92,31 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border overflow-hidden">
+      {/* Mobile: list view */}
+      <div className="sm:hidden space-y-2">
+        {monthRuns.length === 0 ? (
+          <p className="text-muted-foreground text-sm">No runs in {monthLabel}.</p>
+        ) : (
+          monthRuns.map(run => {
+            const runDate = new Date(run.startDate).toLocaleDateString('en-CA', {
+              weekday: 'short', month: 'short', day: 'numeric',
+            });
+            return (
+              <Link
+                key={run.id}
+                href={`/runs/${run.id}`}
+                className="flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-muted/50"
+              >
+                <span className="font-medium">{run.title}</span>
+                <span className="text-sm text-muted-foreground">{runDate}</span>
+              </Link>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop: grid view */}
+      <div className="hidden sm:block rounded-lg border overflow-hidden">
         <div className="grid grid-cols-7 bg-muted text-muted-foreground text-xs text-center border-b">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => (
             <div key={d} className="py-2 font-medium">{d}</div>
