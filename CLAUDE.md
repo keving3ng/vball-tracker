@@ -54,6 +54,7 @@ DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 ## Gotchas
 
 - **Next.js fetch caching**: All `fetch` calls in server-side code must include `cache: 'no-store'` — Next.js 14 caches POSTs by default, causing stale Firebase tokens → 401s from Partiful.
+- **Next.js static generation of API routes**: App Router statically generates API routes with no dynamic segments at build time (actually calls the handler). Any route that hits an external API or DB must have `export const dynamic = 'force-dynamic'` at the top, otherwise `next build` will call it and fail without runtime env vars.
 - **DB location**: `data/vball.db` (gitignored). `DATA_DIR=./data` locally, `/data` in Docker.
 - **Event filtering**: `/api/runs` filters Partiful events to volleyball only via `/vball|volley|🏐/i`.
 
