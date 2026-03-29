@@ -1,4 +1,5 @@
 FROM node:22-alpine AS base
+LABEL org.opencontainers.image.vendor="keg"
 
 # Build stage
 FROM base AS builder
