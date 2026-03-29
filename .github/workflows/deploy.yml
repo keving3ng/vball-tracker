@@ -11,17 +11,21 @@ jobs:
       - name: Checkout vball-tracker
         uses: actions/checkout@v4
 
-      # partiful-api is a local file dep (file:../partiful-api) — clone it alongside
-      - name: Checkout partiful-api
-        uses: actions/checkout@v4
-        with:
-          repository: keving3ng/partiful-api
-          path: ../partiful-api
-
       - name: Tailscale
         uses: tailscale/github-action@v3
         with:
           authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+
+      # Per D-08, D-09: @keg scope routes to Verdaccio. Written in CI — TAILSCALE_IP must not be committed.
+      # CRITICAL: _authToken=verdaccio-anonymous satisfies npm (v5.3+) client-side Authorization requirement.
+      # Verdaccio ignores token content when publish: $all is configured. Without this line, npm exits
+      # with ENEEDAUTH before the request reaches Verdaccio.
+      - name: Write .npmrc for Verdaccio
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+        run: |
+          echo "@keg:registry=http://${TAILSCALE_IP}:4873" > .npmrc
+          echo "//${TAILSCALE_IP}:4873/:_authToken=verdaccio-anonymous" >> .npmrc
 
       # Needed for docker/login-action (uses Docker daemon, not buildkitd)
       - name: Configure insecure registry
