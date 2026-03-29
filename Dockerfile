@@ -4,8 +4,15 @@ LABEL org.opencontainers.image.vendor="keg"
 # Build stage
 FROM base AS builder
 WORKDIR /app
+# VERDACCIO_URL injected by CI (e.g. http://<TAILSCALE_IP>:4873)
+# Written here so npm ci inside the container can reach @keg packages.
+ARG VERDACCIO_URL
 COPY package*.json ./
-RUN npm ci
+RUN if [ -n "$VERDACCIO_URL" ]; then \
+      echo "@keg:registry=${VERDACCIO_URL}" > .npmrc && \
+      echo "//${VERDACCIO_URL#http://}/:_authToken=verdaccio-anonymous" >> .npmrc; \
+    fi
+RUN npm ci && rm -f .npmrc
 COPY . .
 RUN npm run build
 

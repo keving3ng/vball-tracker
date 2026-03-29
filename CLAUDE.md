@@ -48,7 +48,8 @@ DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 
 ## External Packages
 
-- **`partiful-api`** (`~/code/partiful-api`) — Partiful REST + Firestore client, auth, types. Used as `file:../partiful-api` with `transpilePackages: ['partiful-api']` in next.config.js. To request changes, create an issue on `keving3ng/partiful-api` tagged `@claude`.
+- **`@keg/partiful-api`** — Partiful REST + Firestore client, auth, types. Published to Verdaccio (private npm registry on Jonas at port 4873). Imported as `@keg/partiful-api` everywhere. `transpilePackages: ['@keg/partiful-api']` in next.config.js. Source at `keving3ng/partiful-api`. To request changes, create an issue tagged `@claude`.
+- **Local dev note**: `@keg/partiful-api` resolves from Verdaccio (requires Tailscale). `npx tsc --noEmit` will fail locally without VPN — this is expected. CI has Tailscale access and will succeed.
 
 ## Gotchas
 
@@ -60,6 +61,22 @@ DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 
 Tables: `players`, `runs`, `attendance`, `payments` — see `src/lib/db.ts`.
 All prepared queries are on `queries` export from `db.ts`.
+
+## Deploy Pipeline
+
+Push to `main` triggers GitHub Actions:
+1. Joins Tailscale (ephemeral key, `tag:ci`)
+2. Writes `.npmrc` pointing `@keg:registry` → `http://${TAILSCALE_IP}:4873` (Verdaccio) — **never commit .npmrc**, IP injected from secret
+3. Configures Docker daemon + buildkitd for insecure Zot registry at `${TAILSCALE_IP}:5000`
+4. Builds multi-stage Docker image, pushes to Zot as `vball-tracker:latest` + `vball-tracker:<sha>`
+5. SSHes into Jonas → `docker stop/rm/run` (NOT restart)
+
+**Jonas runtime:**
+- Container: `vball-tracker`, port `3000:3000`
+- Data: `/mnt/user/appdata/vball-tracker:/data` (SQLite lives here)
+- Env: `/mnt/user/appdata/vball-tracker/.env` (PARTIFUL_REFRESH_TOKEN, FIREBASE_API_KEY, DATA_DIR=/data)
+
+**First-time bootstrap:** `setup/vball-tracker.sh` — run after first CI push builds the image.
 
 ## Dev Commands
 

@@ -16,17 +16,6 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
-      # Per D-08, D-09: @keg scope routes to Verdaccio. Written in CI — TAILSCALE_IP must not be committed.
-      # CRITICAL: _authToken=verdaccio-anonymous satisfies npm (v5.3+) client-side Authorization requirement.
-      # Verdaccio ignores token content when publish: $all is configured. Without this line, npm exits
-      # with ENEEDAUTH before the request reaches Verdaccio.
-      - name: Write .npmrc for Verdaccio
-        env:
-          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
-        run: |
-          echo "@keg:registry=http://${TAILSCALE_IP}:4873" > .npmrc
-          echo "//${TAILSCALE_IP}:4873/:_authToken=verdaccio-anonymous" >> .npmrc
-
       # Needed for docker/login-action (uses Docker daemon, not buildkitd)
       - name: Configure insecure registry
         env:
@@ -56,6 +45,10 @@ jobs:
         with:
           context: .
           push: true
+          # VERDACCIO_URL passed as build arg so the Dockerfile can write .npmrc
+          # inside the build container before npm ci — host .npmrc is not visible to buildkitd
+          build-args: |
+            VERDACCIO_URL=http://${{ secrets.TAILSCALE_IP }}:4873
           tags: |
             ${{ secrets.TAILSCALE_IP }}:5000/vball-tracker:latest
             ${{ secrets.TAILSCALE_IP }}:5000/vball-tracker:${{ github.sha }}
