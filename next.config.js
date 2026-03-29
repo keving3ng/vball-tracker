@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  transpilePackages: ['partiful-api'],
+  transpilePackages: ['@keg/partiful-api'],
   experimental: {
     serverComponentsExternalPackages: ['better-sqlite3'],
   },
