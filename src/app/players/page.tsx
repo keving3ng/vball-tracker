@@ -30,7 +30,43 @@ export default function PlayersPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Players</h1>
-      <div className="rounded-lg border overflow-hidden">
+
+      {/* Mobile: card stack */}
+      <div className="sm:hidden space-y-2">
+        {players.map(p => (
+          <Link
+            key={p.userId}
+            href={`/players/${p.userId}`}
+            className="flex items-center justify-between px-4 py-3 rounded-lg border hover:bg-muted/50"
+          >
+            <div>
+              <span className="font-medium">
+                {p.displayName ?? p.name}
+              </span>
+              {p.displayName && (
+                <span className="ml-1 text-xs text-muted-foreground">({p.name})</span>
+              )}
+              <p className="text-xs text-muted-foreground">{p.totalRuns} runs</p>
+            </div>
+            <div className="text-right">
+              {p.balance < 0 ? (
+                <span className="text-destructive font-medium text-sm">
+                  ${Math.abs(p.balance).toFixed(2)} owed
+                </span>
+              ) : p.balance > 0 ? (
+                <span className="text-green-600 font-medium text-sm">
+                  ${p.balance.toFixed(2)} credit
+                </span>
+              ) : (
+                <span className="text-muted-foreground text-sm">—</span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden sm:block rounded-lg border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted text-muted-foreground">
             <tr>
