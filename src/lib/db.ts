@@ -155,10 +155,14 @@ export const queries = {
       p.displayName,
       COUNT(DISTINCT a.eventId) as totalRuns,
       COALESCE(SUM(CASE WHEN pay.amountPaid IS NOT NULL THEN 1 ELSE 0 END), 0) as paidRuns,
-      COALESCE(SUM(CASE WHEN pay.amountPaid IS NULL AND pay.amount > 0 THEN 1 ELSE 0 END), 0) as owingRuns,
-      COALESCE(SUM(COALESCE(pay.amountPaid, 0) - pay.amount), 0) as balance
+      COALESCE(SUM(CASE WHEN pay.amountPaid IS NULL AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0 THEN 1 ELSE 0 END), 0) as owingRuns,
+      COALESCE(SUM(
+        COALESCE(pay.amountPaid, 0) -
+        COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END)
+      ), 0) as balance
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
+    LEFT JOIN runs r ON r.eventId = a.eventId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
     GROUP BY p.userId
     ORDER BY totalRuns DESC
