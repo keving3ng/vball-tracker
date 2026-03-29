@@ -16,6 +16,22 @@ jobs:
         with:
           authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
 
+      # Write .npmrc on the runner so npm install can reach Verdaccio for @keg packages.
+      # Also copied into the Docker build context via COPY package*.json ./ — no, .npmrc
+      # is handled via build-arg in the Dockerfile instead (host .npmrc not visible to buildkitd).
+      # This step exists solely to regenerate package-lock.json before the Docker build.
+      - name: Write .npmrc for Verdaccio (runner)
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+        run: |
+          echo "@keg:registry=http://${TAILSCALE_IP}:4873" > .npmrc
+          echo "//${TAILSCALE_IP}:4873/:_authToken=verdaccio-anonymous" >> .npmrc
+
+      # Regenerate package-lock.json so it includes @keg/partiful-api from Verdaccio.
+      # npm ci inside Docker requires lockfile/package.json to be in sync.
+      - name: Regenerate package-lock.json
+        run: npm install --package-lock-only
+
       # Needed for docker/login-action (uses Docker daemon, not buildkitd)
       - name: Configure insecure registry
         env:
@@ -46,7 +62,7 @@ jobs:
           context: .
           push: true
           # VERDACCIO_URL passed as build arg so the Dockerfile can write .npmrc
-          # inside the build container before npm ci — host .npmrc is not visible to buildkitd
+          # inside the build container before npm ci — host .npmrc not visible to buildkitd
           build-args: |
             VERDACCIO_URL=http://${{ secrets.TAILSCALE_IP }}:4873
           tags: |
