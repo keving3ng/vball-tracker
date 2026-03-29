@@ -156,8 +156,8 @@ export default function RunPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1 flex-1 mr-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="space-y-1">
           <h1 className="text-2xl font-bold">{run.title}</h1>
           <p className="text-muted-foreground text-sm">
             {run.startDate ? new Date(run.startDate).toLocaleDateString('en-CA', {
@@ -167,7 +167,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
           </p>
           <NotesField value={run.notes} onSave={updateNotes} />
         </div>
-        <Button onClick={sync} disabled={syncing} variant="outline" size="sm">
+        <Button onClick={sync} disabled={syncing} variant="outline" size="sm" className="self-start">
           {syncing ? 'Syncing...' : 'Sync Partiful'}
         </Button>
       </div>
@@ -209,7 +209,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
                   value={newGuestName}
                   onChange={e => setNewGuestName(e.target.value)}
                   placeholder="Guest name"
-                  className="border rounded px-2 py-1 text-sm flex-1"
+                  className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
                   autoFocus
                   onKeyDown={e => {
                     if (e.key === 'Enter') addGuest();
@@ -277,7 +277,7 @@ function GuestRow({
   const amountOwed = guest.payment?.amount ?? costPerHead;
   const isPaid = guest.payment?.amountPaid != null;
   return (
-    <div className={`flex items-center justify-between px-4 py-2 rounded-lg border ${dim ? 'opacity-50' : ''}`}>
+    <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2 rounded-lg border gap-2 ${dim ? 'opacity-50' : ''}`}>
       <div className="flex items-center gap-3">
         <span className="font-medium">{guest.name}</span>
         <RsvpBadge status={guest.rsvpStatus} />
@@ -287,6 +287,7 @@ function GuestRow({
       </div>
       <Button
         variant={isPaid ? 'default' : 'outline'} size="sm"
+        className="self-start sm:self-auto"
         onClick={() => onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)}
       >
         {isPaid ? '✓ Paid' : 'Mark Paid'}
@@ -308,7 +309,7 @@ function PaymentRow({
   const isPaid = guest.payment?.amountPaid != null;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 rounded-lg border">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2 rounded-lg border gap-2">
       <div className="flex items-center gap-3">
         <span className="font-medium">{guest.name}</span>
         <span className="text-sm text-muted-foreground">${amountOwed.toFixed(2)}</span>
@@ -316,7 +317,7 @@ function PaymentRow({
           <span className="text-xs text-muted-foreground">(paid ${amountPaid.toFixed(2)})</span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 self-start sm:self-auto">
         {!isPaid && editingAmount ? (
           <>
             <input
@@ -402,7 +403,7 @@ function CostSection({
   );
 
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 text-sm">
       <span className="text-muted-foreground">$</span>
       <input
         type="number" value={cost} onChange={e => setCost(e.target.value)}
