@@ -39,7 +39,7 @@ export default function Dashboard() {
     <div className="space-y-8">
       {owing.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <h2 className="text-lg font-semibold">Outstanding</h2>
             <span className="text-destructive font-bold">${totalOutstanding.toFixed(2)}</span>
             <span className="text-sm text-muted-foreground">
@@ -90,12 +90,12 @@ function EventCard({ event }: { event: PartifulEvent }) {
   return (
     <Card>
       <CardHeader className="py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-base">{event.title}</CardTitle>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <CardTitle className="text-base truncate">{event.title}</CardTitle>
             <p className="text-sm text-muted-foreground mt-0.5">{date}</p>
           </div>
-          <Link href={`/runs/${event.id}`}>
+          <Link href={`/runs/${event.id}`} className="shrink-0">
             <Button variant="outline" size="sm">Manage</Button>
           </Link>
         </div>
