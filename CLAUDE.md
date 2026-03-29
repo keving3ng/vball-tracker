@@ -1,6 +1,6 @@
 # VBall Tracker
 
-Self-hosted Next.js web app for managing volleyball private runs. Syncs guest lists from Partiful, tracks attendance and payments, shows player history.
+Self-hosted Next.js web app for managing volleyball private runs. Syncs guest lists from Partiful, tracks payments, shows player history. Attendance is not tracked — GOING RSVPs are assumed to have attended.
 
 ## Stack
 
@@ -15,18 +15,14 @@ src/
   app/
     page.tsx                    # Dashboard: upcoming/past runs
     players/page.tsx            # Player history + stats table
-    runs/[id]/page.tsx          # Run detail: guests, attendance, payments
+    runs/[id]/page.tsx          # Run detail: guests, payments
     api/
-      runs/route.ts             # GET upcoming+past from Partiful
+      runs/route.ts             # GET upcoming+past from Partiful (filtered to vball events)
       runs/[id]/route.ts        # GET run+guests, PATCH run metadata
       runs/[id]/sync/route.ts   # POST sync guests from Partiful/Firestore
-      runs/[id]/attendance/     # POST toggle attendance
       runs/[id]/payments/       # POST upsert payment
       players/route.ts          # GET player stats
   lib/
-    auth.ts       # Firebase token refresh (PARTIFUL_REFRESH_TOKEN → id_token, cached)
-    partiful.ts   # Partiful REST + Firestore client
-    firestore.ts  # Firestore value deserializer + Guest interface
     db.ts         # SQLite schema init + prepared queries
     utils.ts      # shadcn cn() utility
 ```
@@ -49,6 +45,16 @@ DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 - **Firebase project**: `getpartiful`, App ID: `1:939741910890:web:5cca435c4b26209b8a7713`
 - **Kevin's Partiful userId**: `uFItaBptDMVmeXFHhw1Rhma8FOq1`
 - **Test event (vball)**: `fZze0vVmmgdXh55ovvsU` ("WE (V)BALL 🏐🏐🏐")
+
+## External Packages
+
+- **`partiful-api`** (`~/code/partiful-api`) — Partiful REST + Firestore client, auth, types. Used as `file:../partiful-api` with `transpilePackages: ['partiful-api']` in next.config.js. To request changes, create an issue on `keving3ng/partiful-api` tagged `@claude`.
+
+## Gotchas
+
+- **Next.js fetch caching**: All `fetch` calls in server-side code must include `cache: 'no-store'` — Next.js 14 caches POSTs by default, causing stale Firebase tokens → 401s from Partiful.
+- **DB location**: `data/vball.db` (gitignored). `DATA_DIR=./data` locally, `/data` in Docker.
+- **Event filtering**: `/api/runs` filters Partiful events to volleyball only via `/vball|volley|🏐/i`.
 
 ## Database Schema
 
