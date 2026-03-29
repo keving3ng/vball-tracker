@@ -67,9 +67,9 @@ All prepared queries are on `queries` export from `db.ts`.
 
 Push to `main` triggers GitHub Actions:
 1. Joins Tailscale (ephemeral key, `tag:ci`)
-2. Writes `.npmrc` pointing `@keg:registry` → `http://${TAILSCALE_IP}:4873` (Verdaccio) — **never commit .npmrc**, IP injected from secret
+2. Writes `.npmrc` on runner + runs `npm install --package-lock-only` to regenerate lockfile with `@keg/partiful-api` from Verdaccio — **never commit .npmrc**, IP injected from secret
 3. Configures Docker daemon + buildkitd for insecure Zot registry at `${TAILSCALE_IP}:5000`
-4. Builds multi-stage Docker image, pushes to Zot as `vball-tracker:latest` + `vball-tracker:<sha>`
+4. Builds multi-stage Docker image (passes `VERDACCIO_URL` as build arg so `npm ci` inside Docker can reach Verdaccio), pushes to Zot as `vball-tracker:latest` + `vball-tracker:<sha>`
 5. SSHes into Jonas → `docker stop/rm/run` (NOT restart)
 
 **Jonas runtime:**
@@ -77,7 +77,18 @@ Push to `main` triggers GitHub Actions:
 - Data: `/mnt/user/appdata/vball-tracker:/data` (SQLite lives here)
 - Env: `/mnt/user/appdata/vball-tracker/.env` (PARTIFUL_REFRESH_TOKEN, FIREBASE_API_KEY, DATA_DIR=/data)
 
-**First-time bootstrap:** `setup/vball-tracker.sh` — run after first CI push builds the image.
+**First-time bootstrap:** Create the env file on Jonas before the first deploy, then trigger CI:
+
+```bash
+mkdir -p /mnt/user/appdata/vball-tracker
+printf 'PARTIFUL_REFRESH_TOKEN=%s\n' '<token>' > /mnt/user/appdata/vball-tracker/.env
+printf 'FIREBASE_API_KEY=%s\n' '<key>' >> /mnt/user/appdata/vball-tracker/.env
+printf 'DATA_DIR=/data\n' >> /mnt/user/appdata/vball-tracker/.env
+```
+
+Use `printf` not heredoc (`cat <<EOF`) — heredoc termination is unreliable over SSH.
+
+The `docker stop/rm` errors on first deploy ("No such container") are expected and handled by `|| true`.
 
 ## Dev Commands
 
