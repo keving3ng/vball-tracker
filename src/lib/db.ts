@@ -124,6 +124,10 @@ export const queries = {
     ON CONFLICT(eventId, userId) DO UPDATE SET amount=excluded.amount
   `),
 
+  getGoingAttendance: db.prepare(`
+    SELECT userId FROM attendance WHERE eventId = ? AND rsvpStatus = 'GOING'
+  `),
+
   getSetting: db.prepare(`SELECT value FROM settings WHERE key = ?`),
   upsertSetting: db.prepare(`
     INSERT INTO settings (key, value) VALUES (@key, @value)

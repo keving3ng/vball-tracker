@@ -307,7 +307,13 @@ function GuestRow({
   const amountOwed = guest.payment?.amount ?? costPerHead;
   const isPaid = guest.payment?.amountPaid != null;
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 gap-2 bg-background">
+    <div className="flex items-center px-4 py-2.5 gap-3 bg-background">
+      <Button
+        variant={isPaid ? 'default' : 'outline'} size="sm"
+        onClick={() => onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)}
+      >
+        {isPaid ? '✓ Paid' : 'Mark Paid'}
+      </Button>
       <div className="flex items-center gap-2.5">
         <span className="font-medium">{guest.name}</span>
         {showBadge && <RsvpBadge status={guest.rsvpStatus} />}
@@ -315,13 +321,6 @@ function GuestRow({
           <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
         )}
       </div>
-      <Button
-        variant={isPaid ? 'default' : 'outline'} size="sm"
-        className="self-start sm:self-auto"
-        onClick={() => onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)}
-      >
-        {isPaid ? '✓ Paid' : 'Mark Paid'}
-      </Button>
     </div>
   );
 }
@@ -339,45 +338,43 @@ function PaymentRow({
   const isPaid = guest.payment?.amountPaid != null;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 gap-2 bg-background">
+    <div className="flex items-center px-4 py-2.5 gap-3 bg-background">
+      {!isPaid && editingAmount ? (
+        <>
+          <input
+            type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
+            className="w-20 border rounded px-2 py-0.5 text-sm"
+            placeholder={amountOwed.toFixed(2)} autoFocus
+          />
+          <Button size="sm" onClick={() => {
+            onRecord(guest.userId, amountOwed, parseFloat(customAmount) || amountOwed);
+            setEditingAmount(false);
+          }}>Save</Button>
+          <Button size="sm" variant="ghost" onClick={() => setEditingAmount(false)}>✕</Button>
+        </>
+      ) : (
+        <>
+          {!isPaid && (
+            <button
+              onClick={() => setEditingAmount(true)}
+              className="text-xs text-muted-foreground underline decoration-dotted"
+            >
+              custom
+            </button>
+          )}
+          <Button
+            variant={isPaid ? 'default' : 'outline'} size="sm"
+            onClick={() => onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)}
+          >
+            {isPaid ? '✓ Paid' : 'Mark Paid'}
+          </Button>
+        </>
+      )}
       <div className="flex items-center gap-3">
         <span className="font-medium">{guest.name}</span>
         <span className="text-sm text-muted-foreground">${amountOwed.toFixed(2)}</span>
         {isPaid && amountPaid != null && amountPaid !== amountOwed && (
           <span className="text-xs text-muted-foreground">(paid ${amountPaid.toFixed(2)})</span>
-        )}
-      </div>
-      <div className="flex items-center gap-2 self-start sm:self-auto">
-        {!isPaid && editingAmount ? (
-          <>
-            <input
-              type="number" value={customAmount} onChange={e => setCustomAmount(e.target.value)}
-              className="w-20 border rounded px-2 py-0.5 text-sm"
-              placeholder={amountOwed.toFixed(2)} autoFocus
-            />
-            <Button size="sm" onClick={() => {
-              onRecord(guest.userId, amountOwed, parseFloat(customAmount) || amountOwed);
-              setEditingAmount(false);
-            }}>Save</Button>
-            <Button size="sm" variant="ghost" onClick={() => setEditingAmount(false)}>✕</Button>
-          </>
-        ) : (
-          <>
-            {!isPaid && (
-              <button
-                onClick={() => setEditingAmount(true)}
-                className="text-xs text-muted-foreground underline decoration-dotted"
-              >
-                custom
-              </button>
-            )}
-            <Button
-              variant={isPaid ? 'default' : 'outline'} size="sm"
-              onClick={() => onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)}
-            >
-              {isPaid ? '✓ Paid' : 'Mark Paid'}
-            </Button>
-          </>
         )}
       </div>
     </div>
