@@ -102,14 +102,14 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
         ← Players
       </Link>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="space-y-1">
           {editingName ? (
             <div className="flex items-center gap-2">
               <input
                 value={nameVal}
                 onChange={e => setNameVal(e.target.value)}
-                className="text-2xl font-bold border-b border-input bg-transparent outline-none"
+                className="text-2xl font-bold border-b border-input bg-transparent outline-none w-full sm:w-auto"
                 autoFocus
                 onKeyDown={e => {
                   if (e.key === 'Enter') saveName();
@@ -133,7 +133,7 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           )}
         </div>
 
-        <div className="text-right space-y-1">
+        <div className="sm:text-right space-y-1">
           <div className={`text-2xl font-bold ${
             player.balance < 0 ? 'text-destructive' :
             player.balance > 0 ? 'text-green-600' : 'text-muted-foreground'
@@ -193,29 +193,39 @@ export default function PlayerProfilePage({ params }: { params: { id: string } }
           <p className="text-sm text-muted-foreground">No runs yet.</p>
         )}
         {player.runs.length > 0 && (
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted text-muted-foreground">
-                <tr>
-                  <th className="text-left px-4 py-2 font-medium">Run</th>
-                  <th className="text-center px-4 py-2 font-medium">Owed</th>
-                  <th className="text-center px-4 py-2 font-medium">Paid</th>
-                  <th className="text-center px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {player.runs.map((run, i) => (
-                  <RunHistoryRow
-                    key={run.eventId}
-                    run={run}
-                    striped={i % 2 !== 0}
-                    onRecord={recordPayment}
-                  />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile: card per run */}
+            <div className="sm:hidden space-y-2">
+              {player.runs.map(run => (
+                <MobileRunCard key={run.eventId} run={run} onRecord={recordPayment} />
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden sm:block rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium">Run</th>
+                    <th className="text-center px-4 py-2 font-medium">Owed</th>
+                    <th className="text-center px-4 py-2 font-medium">Paid</th>
+                    <th className="text-center px-4 py-2 font-medium">Status</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {player.runs.map((run, i) => (
+                    <RunHistoryRow
+                      key={run.eventId}
+                      run={run}
+                      striped={i % 2 !== 0}
+                      onRecord={recordPayment}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -304,5 +314,91 @@ function RunHistoryRow({
         )}
       </td>
     </tr>
+  );
+}
+
+function MobileRunCard({
+  run, onRecord,
+}: {
+  run: RunEntry;
+  onRecord: (eventId: string, amountOwed: number, amountPaid: number | null) => void;
+}) {
+  const [editingAmount, setEditingAmount] = useState(false);
+  const [customAmount, setCustomAmount] = useState('');
+
+  const date = run.startDate
+    ? new Date(run.startDate).toLocaleDateString('en-CA', {
+        month: 'short', day: 'numeric', year: 'numeric',
+      })
+    : '—';
+
+  const status = !run.paid
+    ? 'unpaid'
+    : run.amountPaid != null && run.amountPaid !== run.amountOwed
+    ? 'partial'
+    : 'paid';
+
+  return (
+    <div className="rounded-lg border px-4 py-3 space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <Link href={`/runs/${run.eventId}`} className="font-medium hover:underline truncate block">
+            {run.title}
+          </Link>
+          <p className="text-xs text-muted-foreground">{date}</p>
+        </div>
+        <Badge
+          variant={
+            status === 'paid' ? 'default' :
+            status === 'partial' ? 'secondary' : 'outline'
+          }
+        >
+          {status}
+        </Badge>
+      </div>
+      <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <span>Owed: ${run.amountOwed.toFixed(2)}</span>
+        {run.amountPaid != null && (
+          <span>Paid: ${run.amountPaid.toFixed(2)}</span>
+        )}
+      </div>
+      <div className="flex items-center gap-2">
+        {editingAmount ? (
+          <>
+            <input
+              type="number"
+              value={customAmount}
+              onChange={e => setCustomAmount(e.target.value)}
+              className="w-20 border rounded px-2 py-0.5 text-sm"
+              placeholder={run.amountOwed.toFixed(2)}
+              autoFocus
+            />
+            <Button size="sm" onClick={() => {
+              onRecord(run.eventId, run.amountOwed, parseFloat(customAmount) || run.amountOwed);
+              setEditingAmount(false);
+            }}>Save</Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditingAmount(false)}>✕</Button>
+          </>
+        ) : (
+          <>
+            {!run.paid && (
+              <button
+                onClick={() => setEditingAmount(true)}
+                className="text-xs text-muted-foreground underline decoration-dotted"
+              >
+                custom
+              </button>
+            )}
+            <Button
+              size="sm"
+              variant={run.paid ? 'default' : 'outline'}
+              onClick={() => onRecord(run.eventId, run.amountOwed, run.paid ? null : run.amountOwed)}
+            >
+              {run.paid ? '✓ Paid' : 'Mark Paid'}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
