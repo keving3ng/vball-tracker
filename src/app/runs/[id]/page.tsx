@@ -1,10 +1,8 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface Payment {
   amount: number;
@@ -44,6 +42,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [showAddGuest, setShowAddGuest] = useState(false);
   const [newGuestName, setNewGuestName] = useState('');
+  const [activeTab, setActiveTab] = useState<'guests' | 'payments'>('guests');
 
   const sync = useCallback(async () => {
     setSyncing(true);
@@ -155,7 +154,8 @@ export default function RunPage({ params }: { params: { id: string } }) {
   const costPerHead = run.costPerHead ?? 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-2xl font-bold">{run.title}</h1>
@@ -172,80 +172,121 @@ export default function RunPage({ params }: { params: { id: string } }) {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Going" value={`${going.length}${run.capacity ? ` / ${run.capacity}` : ''}`} />
-        <StatCard label="Paid" value={`${paid.length} / ${going.length}`} />
+      {/* Compact stats */}
+      <div className="flex gap-5 text-sm">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-muted-foreground">Going</span>
+          <span className="font-semibold text-base">
+            {going.length}{run.capacity ? ` / ${run.capacity}` : ''}
+          </span>
+        </div>
+        <div className="w-px bg-border" />
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-muted-foreground">Paid</span>
+          <span className="font-semibold text-base">{paid.length} / {going.length}</span>
+        </div>
       </div>
 
-      <Tabs defaultValue="guests">
-        <TabsList>
-          <TabsTrigger value="guests">Guest List</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-        </TabsList>
+      {/* Custom tab nav */}
+      <div className="space-y-4">
+        <div className="flex border-b">
+          <button
+            onClick={() => setActiveTab('guests')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === 'guests'
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Guest List
+          </button>
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              activeTab === 'payments'
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Payments
+          </button>
+        </div>
 
-        <TabsContent value="guests" className="space-y-2 mt-4">
-          {going.map(guest => (
-            <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} />
-          ))}
-          {maybe.map(guest => (
-            <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} dim />
-          ))}
-          {waitlist.length > 0 && (
-            <div className="mt-2">
-              <p className="text-xs text-muted-foreground font-medium mb-1 uppercase tracking-wide">Waitlist</p>
-              {waitlist.map(guest => (
-                <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} dim />
-              ))}
-            </div>
-          )}
-          {other.map(guest => (
-            <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} dim />
-          ))}
-
-          <div className="mt-3">
-            {showAddGuest ? (
-              <div className="flex gap-2">
-                <input
-                  value={newGuestName}
-                  onChange={e => setNewGuestName(e.target.value)}
-                  placeholder="Guest name"
-                  className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
-                  autoFocus
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') addGuest();
-                    if (e.key === 'Escape') setShowAddGuest(false);
-                  }}
-                />
-                <Button size="sm" onClick={addGuest}>Add</Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowAddGuest(false)}>✕</Button>
+        {activeTab === 'guests' && (
+          <div className="space-y-3">
+            {going.length > 0 && (
+              <div className="rounded-lg border overflow-hidden divide-y">
+                {going.map(guest => (
+                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} />
+                ))}
               </div>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => setShowAddGuest(true)}>
-                + Add Guest
-              </Button>
+            )}
+
+            {(maybe.length > 0 || waitlist.length > 0 || other.length > 0) && (
+              <div className="rounded-lg border overflow-hidden divide-y opacity-60">
+                {maybe.map(guest => (
+                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                ))}
+                {waitlist.length > 0 && waitlist.map(guest => (
+                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                ))}
+                {other.map(guest => (
+                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                ))}
+              </div>
+            )}
+
+            <div>
+              {showAddGuest ? (
+                <div className="flex gap-2">
+                  <input
+                    value={newGuestName}
+                    onChange={e => setNewGuestName(e.target.value)}
+                    placeholder="Guest name"
+                    className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
+                    autoFocus
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') addGuest();
+                      if (e.key === 'Escape') setShowAddGuest(false);
+                    }}
+                  />
+                  <Button size="sm" onClick={addGuest}>Add</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowAddGuest(false)}>✕</Button>
+                </div>
+              ) : (
+                <Button variant="outline" size="sm" onClick={() => setShowAddGuest(true)}>
+                  + Add Guest
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <div className="space-y-3">
+            <CostSection
+              totalCost={run.totalCost}
+              splitCount={run.splitCount}
+              presets={presets}
+              onUpdate={updateCost}
+              onSavePreset={savePreset}
+              onApplyPreset={p => updateCost(p.totalCost, p.splitCount)}
+            />
+            {going.length > 0 && (
+              <div className="rounded-lg border overflow-hidden divide-y">
+                {going.map(guest => (
+                  <PaymentRow
+                    key={guest.userId}
+                    guest={guest}
+                    costPerHead={costPerHead}
+                    onRecord={recordPayment}
+                  />
+                ))}
+              </div>
             )}
           </div>
-        </TabsContent>
-
-        <TabsContent value="payments" className="space-y-3 mt-4">
-          <CostSection
-            totalCost={run.totalCost}
-            splitCount={run.splitCount}
-            presets={presets}
-            onUpdate={updateCost}
-            onSavePreset={savePreset}
-            onApplyPreset={p => updateCost(p.totalCost, p.splitCount)}
-          />
-          {going.map(guest => (
-            <PaymentRow
-              key={guest.userId}
-              guest={guest}
-              costPerHead={costPerHead}
-              onRecord={recordPayment}
-            />
-          ))}
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
 
       {run.syncedAt && (
         <p className="text-xs text-muted-foreground">
@@ -256,31 +297,20 @@ export default function RunPage({ params }: { params: { id: string } }) {
   );
 }
 
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function GuestRow({
-  guest, costPerHead, onRecord, dim,
+  guest, costPerHead, onRecord, showBadge,
 }: {
   guest: Guest; costPerHead: number;
   onRecord: (userId: string, amountOwed: number, amountPaid: number | null) => void;
-  dim?: boolean;
+  showBadge?: boolean;
 }) {
   const amountOwed = guest.payment?.amount ?? costPerHead;
   const isPaid = guest.payment?.amountPaid != null;
   return (
-    <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2 rounded-lg border gap-2 ${dim ? 'opacity-50' : ''}`}>
-      <div className="flex items-center gap-3">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 gap-2 bg-background">
+      <div className="flex items-center gap-2.5">
         <span className="font-medium">{guest.name}</span>
-        <RsvpBadge status={guest.rsvpStatus} />
+        {showBadge && <RsvpBadge status={guest.rsvpStatus} />}
         {guest.userId.startsWith('manual-') && (
           <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
         )}
@@ -309,7 +339,7 @@ function PaymentRow({
   const isPaid = guest.payment?.amountPaid != null;
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2 rounded-lg border gap-2">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-2.5 gap-2 bg-background">
       <div className="flex items-center gap-3">
         <span className="font-medium">{guest.name}</span>
         <span className="text-sm text-muted-foreground">${amountOwed.toFixed(2)}</span>
