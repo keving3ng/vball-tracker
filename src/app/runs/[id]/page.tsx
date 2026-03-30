@@ -167,9 +167,16 @@ export default function RunPage({ params }: { params: { id: string } }) {
           </p>
           <NotesField value={run.notes} onSave={updateNotes} />
         </div>
-        <Button onClick={sync} disabled={syncing} variant="outline" size="sm" className="self-start">
-          {syncing ? 'Syncing...' : 'Sync Partiful'}
-        </Button>
+        <div className="flex gap-2 self-start">
+          <Button asChild variant="outline" size="sm">
+            <a href={`https://partiful.com/events/${run.eventId}`} target="_blank" rel="noopener noreferrer">
+              View on Partiful
+            </a>
+          </Button>
+          <Button onClick={sync} disabled={syncing} variant="outline" size="sm">
+            {syncing ? 'Syncing...' : 'Sync Partiful'}
+          </Button>
+        </div>
       </div>
 
       {/* Compact stats */}
