@@ -232,13 +232,13 @@ export default function RunPage({ params }: { params: { id: string } }) {
             {(maybe.length > 0 || waitlist.length > 0 || other.length > 0) && (
               <div className="rounded-lg border overflow-hidden divide-y opacity-60">
                 {maybe.map(guest => (
-                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                  <NonGoingGuestRow key={guest.userId} guest={guest} />
                 ))}
-                {waitlist.length > 0 && waitlist.map(guest => (
-                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                {waitlist.map(guest => (
+                  <NonGoingGuestRow key={guest.userId} guest={guest} />
                 ))}
                 {other.map(guest => (
-                  <GuestRow key={guest.userId} guest={guest} costPerHead={costPerHead} onRecord={recordPayment} showBadge />
+                  <NonGoingGuestRow key={guest.userId} guest={guest} />
                 ))}
               </div>
             )}
@@ -328,6 +328,18 @@ function GuestRow({
           <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
         )}
       </div>
+    </div>
+  );
+}
+
+function NonGoingGuestRow({ guest }: { guest: Guest }) {
+  return (
+    <div className="flex items-center px-4 py-2.5 gap-2.5 bg-background">
+      <span className="font-medium">{guest.name}</span>
+      <RsvpBadge status={guest.rsvpStatus} />
+      {guest.userId.startsWith('manual-') && (
+        <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
+      )}
     </div>
   );
 }

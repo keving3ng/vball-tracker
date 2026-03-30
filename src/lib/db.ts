@@ -124,6 +124,10 @@ export const queries = {
     ON CONFLICT(eventId, userId) DO UPDATE SET amount=excluded.amount
   `),
 
+  deleteUnpaidPayment: db.prepare(`
+    DELETE FROM payments WHERE eventId = ? AND userId = ? AND amountPaid IS NULL
+  `),
+
   getGoingAttendance: db.prepare(`
     SELECT userId FROM attendance WHERE eventId = ? AND rsvpStatus = 'GOING'
   `),
