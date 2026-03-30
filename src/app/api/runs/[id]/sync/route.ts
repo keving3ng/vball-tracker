@@ -34,6 +34,8 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
         userId: guest.userId,
         amount: amountOwed,
       });
+    } else if (guest.status !== 'GOING') {
+      queries.deleteUnpaidPayment.run(params.id, guest.userId);
     }
   }
 
