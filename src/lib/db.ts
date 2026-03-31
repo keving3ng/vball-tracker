@@ -57,6 +57,7 @@ for (const sql of [
   `ALTER TABLE players ADD COLUMN displayName TEXT`,
   `ALTER TABLE players ADD COLUMN notes TEXT`,
   `ALTER TABLE payments ADD COLUMN amountPaid REAL`,
+  `ALTER TABLE runs ADD COLUMN hostUserId TEXT`,
 ]) {
   try { db.exec(sql); } catch {}
 }
@@ -68,6 +69,7 @@ export interface Run {
   eventId: string; title: string; startDate: string | null;
   capacity: number | null; totalCost: number | null; splitCount: number;
   costPerHead: number | null; notes: string | null; syncedAt: string | null;
+  hostUserId: string | null;
 }
 export interface AttendanceRow { eventId: string; userId: string; rsvpStatus: string }
 export interface PaymentRow {
@@ -126,6 +128,24 @@ export const queries = {
 
   deleteUnpaidPayment: db.prepare(`
     DELETE FROM payments WHERE eventId = ? AND userId = ? AND amountPaid IS NULL
+  `),
+
+  updateRunHost: db.prepare(`
+    UPDATE runs SET hostUserId = @hostUserId WHERE eventId = @eventId
+  `),
+
+  getLastRunHost: db.prepare(`
+    SELECT hostUserId FROM runs WHERE hostUserId IS NOT NULL ORDER BY startDate DESC LIMIT 1
+  `),
+
+  markHostPaid: db.prepare(`
+    UPDATE payments SET amount = @amount, amountPaid = @amountPaid, paid = 1
+    WHERE eventId = @eventId AND userId = @userId
+  `),
+
+  clearHostPayment: db.prepare(`
+    UPDATE payments SET amountPaid = NULL, paid = 0
+    WHERE eventId = ? AND userId = ? AND amountPaid IS NOT NULL AND amountPaid = amount
   `),
 
   getGoingAttendance: db.prepare(`
