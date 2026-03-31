@@ -30,6 +30,7 @@ interface Run {
   costPerHead: number | null;
   notes: string | null;
   syncedAt: string | null;
+  hostUserId: string | null;
   guests: Guest[];
 }
 
@@ -115,6 +116,32 @@ export default function RunPage({ params }: { params: { id: string } }) {
       body: JSON.stringify({ notes }),
     });
     setRun(prev => prev ? { ...prev, notes } : prev);
+  };
+
+  const updateHost = async (hostUserId: string | null) => {
+    const oldHostId = run?.hostUserId ?? null;
+    await fetch(`/api/runs/${params.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hostUserId }),
+    });
+    setRun(prev => {
+      if (!prev) return prev;
+      const costPerHead = prev.costPerHead ?? 0;
+      return {
+        ...prev,
+        hostUserId,
+        guests: prev.guests.map(g => {
+          if (g.userId === hostUserId) {
+            return { ...g, payment: { ...g.payment, amountPaid: g.payment?.amount ?? costPerHead } };
+          }
+          if (g.userId === oldHostId && g.payment?.amountPaid === (g.payment?.amount ?? costPerHead)) {
+            return { ...g, payment: { ...g.payment, amountPaid: null } };
+          }
+          return g;
+        }),
+      };
+    });
   };
 
   const savePreset = async () => {
@@ -279,6 +306,11 @@ export default function RunPage({ params }: { params: { id: string } }) {
               onSavePreset={savePreset}
               onApplyPreset={p => updateCost(p.totalCost, p.splitCount)}
             />
+            <HostSection
+              hostUserId={run.hostUserId}
+              going={going}
+              onUpdate={updateHost}
+            />
             {going.length > 0 && (
               <div className="rounded-lg border overflow-hidden divide-y">
                 {going.map(guest => (
@@ -305,11 +337,10 @@ export default function RunPage({ params }: { params: { id: string } }) {
 }
 
 function GuestRow({
-  guest, costPerHead, onRecord, showBadge,
+  guest, costPerHead, onRecord,
 }: {
   guest: Guest; costPerHead: number;
   onRecord: (userId: string, amountOwed: number, amountPaid: number | null) => void;
-  showBadge?: boolean;
 }) {
   const amountOwed = guest.payment?.amount ?? costPerHead;
   const isPaid = guest.payment?.amountPaid != null;
@@ -323,7 +354,6 @@ function GuestRow({
       </Button>
       <div className="flex items-center gap-2.5">
         <span className="font-medium">{guest.name}</span>
-        {showBadge && <RsvpBadge status={guest.rsvpStatus} />}
         {guest.userId.startsWith('manual-') && (
           <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
         )}
@@ -340,6 +370,30 @@ function NonGoingGuestRow({ guest }: { guest: Guest }) {
       {guest.userId.startsWith('manual-') && (
         <span className="text-xs text-muted-foreground bg-muted px-1 rounded">manual</span>
       )}
+    </div>
+  );
+}
+
+function HostSection({
+  hostUserId, going, onUpdate,
+}: {
+  hostUserId: string | null;
+  going: Guest[];
+  onUpdate: (hostUserId: string | null) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap text-sm">
+      <span className="text-muted-foreground">Host:</span>
+      <select
+        value={hostUserId ?? ''}
+        onChange={e => onUpdate(e.target.value || null)}
+        className="border rounded px-2 py-0.5 text-sm"
+      >
+        <option value="">None</option>
+        {going.map(g => (
+          <option key={g.userId} value={g.userId}>{g.name}</option>
+        ))}
+      </select>
     </div>
   );
 }
