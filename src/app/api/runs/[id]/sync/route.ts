@@ -39,5 +39,28 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     }
   }
 
+  // Auto-set host from last run if not already set
+  let hostUserId: string | null = run?.hostUserId ?? null;
+  if (!hostUserId) {
+    const lastHost = queries.getLastRunHost.get() as any;
+    if (lastHost?.hostUserId) {
+      hostUserId = lastHost.hostUserId;
+      queries.updateRunHost.run({ hostUserId, eventId: params.id });
+    }
+  }
+
+  // Mark host as paid if they are GOING this run
+  if (hostUserId && amountOwed > 0) {
+    const isGoing = guests.some((g: any) => g.userId === hostUserId && g.status === 'GOING');
+    if (isGoing) {
+      queries.markHostPaid.run({
+        amount: amountOwed,
+        amountPaid: amountOwed,
+        eventId: params.id,
+        userId: hostUserId,
+      });
+    }
+  }
+
   return NextResponse.json({ synced: guests.length });
 }
