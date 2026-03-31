@@ -21,6 +21,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     costPerHead,
     notes: r0.notes,
     syncedAt: r0.syncedAt,
+    hostUserId: r0.hostUserId ?? null,
     guests: rows
       .filter(r => r.userId)
       .map(r => ({
@@ -65,10 +66,39 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       for (const a of going) {
         queries.upsertPaymentOwed.run({ eventId: params.id, userId: a.userId, amount: amountOwed });
       }
+      const run = queries.getRunBasic.get(params.id) as any;
+      if (run?.hostUserId) {
+        queries.markHostPaid.run({
+          amount: amountOwed,
+          amountPaid: amountOwed,
+          eventId: params.id,
+          userId: run.hostUserId,
+        });
+      }
     }
   }
   if (body.notes !== undefined) {
     queries.updateRunNotes.run({ eventId: params.id, notes: body.notes });
+  }
+  if ('hostUserId' in body) {
+    const current = queries.getRunBasic.get(params.id) as any;
+    const oldHostId: string | null = current?.hostUserId ?? null;
+    const newHostId: string | null = body.hostUserId ?? null;
+
+    queries.updateRunHost.run({ hostUserId: newHostId, eventId: params.id });
+
+    if (newHostId && current?.totalCost != null && current.totalCost > 0) {
+      const costPerHead = current.totalCost / (current.splitCount ?? 12);
+      queries.markHostPaid.run({
+        amount: costPerHead,
+        amountPaid: costPerHead,
+        eventId: params.id,
+        userId: newHostId,
+      });
+    }
+    if (oldHostId && oldHostId !== newHostId) {
+      queries.clearHostPayment.run(params.id, oldHostId);
+    }
   }
 
   return NextResponse.json({ ok: true });
