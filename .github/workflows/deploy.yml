@@ -88,3 +88,23 @@ jobs:
                  -v /mnt/user/appdata/vball-tracker:/data \
                  --env-file /mnt/user/appdata/vball-tracker/.env \
                  ${TAILSCALE_IP}:5000/vball-tracker:latest"
+
+      - name: Notify Discord (success)
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
+            -d "{\"content\": \"✅ **vball-tracker deploy succeeded** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
+
+      - name: Notify Discord (failure)
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
+            -d "{\"content\": \"❌ **vball-tracker deploy failed** — \`${SHA:0:7}\`\n${RUN_URL}\"}"

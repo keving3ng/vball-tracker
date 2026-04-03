@@ -247,6 +247,75 @@ export const queries = {
     UPDATE players SET displayName=@displayName, notes=@notes, updatedAt=datetime('now')
     WHERE userId=@userId
   `),
+
+	getAllPlayersBasic: db.prepare(`
+    SELECT userId, name, displayName FROM players ORDER BY COALESCE(displayName, name) COLLATE NOCASE
+  `),
+
+	getPlayerBasic: db.prepare(
+		`SELECT userId, name, displayName FROM players WHERE userId = ?`,
+	),
+
+	// Merge helpers — used by mergePlayerIntoTarget transaction below
+	getAttendanceEventIds: db.prepare(
+		`SELECT eventId FROM attendance WHERE userId = ?`,
+	),
+	getPaymentEventIds: db.prepare(
+		`SELECT eventId FROM payments WHERE userId = ?`,
+	),
+	checkAttendance: db.prepare(
+		`SELECT 1 FROM attendance WHERE eventId = ? AND userId = ?`,
+	),
+	checkPayment: db.prepare(
+		`SELECT 1 FROM payments WHERE eventId = ? AND userId = ?`,
+	),
+	updateAttendanceUser: db.prepare(
+		`UPDATE attendance SET userId = ? WHERE userId = ? AND eventId = ?`,
+	),
+	deleteAttendanceRow: db.prepare(
+		`DELETE FROM attendance WHERE userId = ? AND eventId = ?`,
+	),
+	updatePaymentUser: db.prepare(
+		`UPDATE payments SET userId = ? WHERE userId = ? AND eventId = ?`,
+	),
+	deletePaymentRow: db.prepare(
+		`DELETE FROM payments WHERE userId = ? AND eventId = ?`,
+	),
+	updateRunHostUser: db.prepare(
+		`UPDATE runs SET hostUserId = ? WHERE hostUserId = ?`,
+	),
+	deletePlayer: db.prepare(`DELETE FROM players WHERE userId = ?`),
 };
+
+// Merges sourceId (manual player) into targetId (Partiful player).
+// Attendance and payment records move to target; conflicts favour target.
+export const mergePlayerIntoTarget = db.transaction(
+	(sourceId: string, targetId: string) => {
+		const attendance = queries.getAttendanceEventIds.all(sourceId) as {
+			eventId: string;
+		}[];
+		for (const { eventId } of attendance) {
+			if (queries.checkAttendance.get(eventId, targetId)) {
+				queries.deleteAttendanceRow.run(sourceId, eventId);
+			} else {
+				queries.updateAttendanceUser.run(targetId, sourceId, eventId);
+			}
+		}
+
+		const payments = queries.getPaymentEventIds.all(sourceId) as {
+			eventId: string;
+		}[];
+		for (const { eventId } of payments) {
+			if (queries.checkPayment.get(eventId, targetId)) {
+				queries.deletePaymentRow.run(sourceId, eventId);
+			} else {
+				queries.updatePaymentUser.run(targetId, sourceId, eventId);
+			}
+		}
+
+		queries.updateRunHostUser.run(targetId, sourceId);
+		queries.deletePlayer.run(sourceId);
+	},
+);
 
 export default db;

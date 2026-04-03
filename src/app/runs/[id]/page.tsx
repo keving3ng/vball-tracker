@@ -40,6 +40,12 @@ interface Preset {
 	splitCount: number;
 }
 
+interface PlayerBasic {
+	userId: string;
+	name: string;
+	displayName: string | null;
+}
+
 export default function RunPage({ params }: { params: { id: string } }) {
 	const [run, setRun] = useState<Run | null>(null);
 	const [syncing, setSyncing] = useState(false);
@@ -47,6 +53,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const [presets, setPresets] = useState<Preset[]>([]);
 	const [showAddGuest, setShowAddGuest] = useState(false);
 	const [newGuestName, setNewGuestName] = useState("");
+	const [allPlayers, setAllPlayers] = useState<PlayerBasic[]>([]);
 	const [activeTab, setActiveTab] = useState<"guests" | "payments">("guests");
 
 	const sync = useCallback(async () => {
@@ -201,12 +208,21 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		setPresets(newPresets);
 	};
 
-	const addGuest = async () => {
-		if (!newGuestName.trim()) return;
+	const openAddGuest = async () => {
+		setShowAddGuest(true);
+		if (allPlayers.length === 0) {
+			const res = await fetch("/api/players");
+			if (res.ok) setAllPlayers(await res.json());
+		}
+	};
+
+	const addGuest = async (userId?: string) => {
+		const body = userId ? { userId } : { name: newGuestName.trim() };
+		if (!userId && !newGuestName.trim()) return;
 		await fetch(`/api/runs/${params.id}/guests`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: newGuestName.trim() }),
+			body: JSON.stringify(body),
 		});
 		setNewGuestName("");
 		setShowAddGuest(false);
@@ -335,35 +351,20 @@ export default function RunPage({ params }: { params: { id: string } }) {
 
 						<div>
 							{showAddGuest ? (
-								<div className="flex gap-2">
-									<input
-										value={newGuestName}
-										onChange={(e) => setNewGuestName(e.target.value)}
-										placeholder="Guest name"
-										className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
-										autoFocus
-										onKeyDown={(e) => {
-											if (e.key === "Enter") addGuest();
-											if (e.key === "Escape") setShowAddGuest(false);
-										}}
-									/>
-									<Button size="sm" onClick={addGuest}>
-										Add
-									</Button>
-									<Button
-										size="sm"
-										variant="ghost"
-										onClick={() => setShowAddGuest(false)}
-									>
-										✕
-									</Button>
-								</div>
+								<AddGuestForm
+									query={newGuestName}
+									onQueryChange={setNewGuestName}
+									allPlayers={allPlayers}
+									currentGuestIds={new Set(run.guests.map((g) => g.userId))}
+									onSelectExisting={(userId) => addGuest(userId)}
+									onAddNew={() => addGuest()}
+									onCancel={() => {
+										setShowAddGuest(false);
+										setNewGuestName("");
+									}}
+								/>
 							) : (
-								<Button
-									variant="outline"
-									size="sm"
-									onClick={() => setShowAddGuest(true)}
-								>
+								<Button variant="outline" size="sm" onClick={openAddGuest}>
 									+ Add Guest
 								</Button>
 							)}
@@ -406,6 +407,76 @@ export default function RunPage({ params }: { params: { id: string } }) {
 				<p className="text-xs text-muted-foreground">
 					Last synced: {new Date(run.syncedAt).toLocaleString()}
 				</p>
+			)}
+		</div>
+	);
+}
+
+function AddGuestForm({
+	query,
+	onQueryChange,
+	allPlayers,
+	currentGuestIds,
+	onSelectExisting,
+	onAddNew,
+	onCancel,
+}: {
+	query: string;
+	onQueryChange: (v: string) => void;
+	allPlayers: { userId: string; name: string; displayName: string | null }[];
+	currentGuestIds: Set<string>;
+	onSelectExisting: (userId: string) => void;
+	onAddNew: () => void;
+	onCancel: () => void;
+}) {
+	const q = query.trim().toLowerCase();
+	const suggestions = q
+		? allPlayers.filter((p) => {
+				if (currentGuestIds.has(p.userId)) return false;
+				const display = (p.displayName ?? p.name).toLowerCase();
+				const partiful = p.name.toLowerCase();
+				return display.includes(q) || partiful.includes(q);
+			})
+		: [];
+
+	return (
+		<div className="space-y-1">
+			<div className="flex gap-2">
+				<input
+					value={query}
+					onChange={(e) => onQueryChange(e.target.value)}
+					placeholder="Search players or enter new name"
+					className="border rounded px-2 py-1 text-sm flex-1 min-w-0"
+					autoFocus
+					onKeyDown={(e) => {
+						if (e.key === "Escape") onCancel();
+					}}
+				/>
+				<Button size="sm" variant="ghost" onClick={onCancel}>
+					✕
+				</Button>
+			</div>
+			{q && (
+				<div className="border rounded overflow-hidden text-sm">
+					{suggestions.map((p) => (
+						<button
+							key={p.userId}
+							className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+							onClick={() => onSelectExisting(p.userId)}
+						>
+							<span className="font-medium">{p.displayName ?? p.name}</span>
+							{p.displayName && (
+								<span className="text-muted-foreground text-xs">{p.name}</span>
+							)}
+						</button>
+					))}
+					<button
+						className="w-full text-left px-3 py-2 hover:bg-muted text-muted-foreground"
+						onClick={onAddNew}
+					>
+						+ Add &ldquo;{query.trim()}&rdquo; as new player
+					</button>
+				</div>
 			)}
 		</div>
 	);
