@@ -258,6 +258,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 									day: "numeric",
 									hour: "numeric",
 									minute: "2-digit",
+									timeZone: "America/Toronto",
 								})
 							: "Date TBD"}
 					</p>

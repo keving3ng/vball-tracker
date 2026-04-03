@@ -445,6 +445,7 @@ function RunHistoryRow({
 				month: "short",
 				day: "numeric",
 				year: "numeric",
+				timeZone: "America/Toronto",
 			})
 		: "—";
 
@@ -563,6 +564,7 @@ function MobileRunCard({
 				month: "short",
 				day: "numeric",
 				year: "numeric",
+				timeZone: "America/Toronto",
 			})
 		: "—";
 

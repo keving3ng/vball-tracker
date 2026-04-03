@@ -180,6 +180,7 @@ function EventCard({ event }: { event: PartifulEvent }) {
 				day: "numeric",
 				hour: "numeric",
 				minute: "2-digit",
+				timeZone: "America/Toronto",
 			})
 		: "TBD";
 	return (
