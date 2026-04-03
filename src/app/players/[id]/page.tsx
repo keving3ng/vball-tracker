@@ -37,6 +37,7 @@ export default function PlayerProfilePage({
 }: {
 	params: { id: string };
 }) {
+	const router = useRouter();
 	const [player, setPlayer] = useState<PlayerProfile | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [editingName, setEditingName] = useState(false);
@@ -44,6 +45,11 @@ export default function PlayerProfilePage({
 	const [editingNotes, setEditingNotes] = useState(false);
 	const [notesVal, setNotesVal] = useState("");
 	const [copied, setCopied] = useState(false);
+	const [showMerge, setShowMerge] = useState(false);
+	const [mergeQuery, setMergeQuery] = useState("");
+	const [mergePlayers, setMergePlayers] = useState<PlayerBasic[]>([]);
+	const [mergeTarget, setMergeTarget] = useState<PlayerBasic | null>(null);
+	const [merging, setMerging] = useState(false);
 
 	const load = useCallback(async () => {
 		const res = await fetch(`/api/players/${params.id}`);
@@ -111,6 +117,36 @@ export default function PlayerProfilePage({
 			);
 			return { ...prev, balance: newBalance, runs: updatedRuns };
 		});
+	};
+
+	const openMerge = async () => {
+		setShowMerge(true);
+		if (mergePlayers.length === 0) {
+			const res = await fetch("/api/players");
+			if (res.ok) {
+				const all = (await res.json()) as PlayerBasic[];
+				setMergePlayers(
+					all.filter(
+						(p) => !p.userId.startsWith("manual-") && p.userId !== params.id,
+					),
+				);
+			}
+		}
+	};
+
+	const doMerge = async () => {
+		if (!mergeTarget) return;
+		setMerging(true);
+		const res = await fetch(`/api/players/${params.id}/merge`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ targetUserId: mergeTarget.userId }),
+		});
+		if (res.ok) {
+			router.push(`/players/${mergeTarget.userId}`);
+		} else {
+			setMerging(false);
+		}
 	};
 
 	const copyReminder = async () => {
@@ -255,6 +291,87 @@ export default function PlayerProfilePage({
 					</p>
 				)}
 			</div>
+
+			{params.id.startsWith("manual-") && (
+				<div className="space-y-2 rounded-lg border p-4">
+					<p className="text-sm font-medium">Merge with Partiful account</p>
+					<p className="text-xs text-muted-foreground">
+						Moves all attendance and payment history to the selected player,
+						then deletes this manual entry.
+					</p>
+					{!showMerge ? (
+						<Button variant="outline" size="sm" onClick={openMerge}>
+							Merge…
+						</Button>
+					) : mergeTarget ? (
+						<div className="flex items-center gap-2 flex-wrap">
+							<span className="text-sm">
+								Merge into{" "}
+								<strong>{mergeTarget.displayName ?? mergeTarget.name}</strong>?
+							</span>
+							<Button size="sm" onClick={doMerge} disabled={merging}>
+								{merging ? "Merging…" : "Confirm"}
+							</Button>
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={() => setMergeTarget(null)}
+							>
+								Change
+							</Button>
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={() => {
+									setShowMerge(false);
+									setMergeTarget(null);
+									setMergeQuery("");
+								}}
+							>
+								Cancel
+							</Button>
+						</div>
+					) : (
+						<div className="space-y-1">
+							<input
+								value={mergeQuery}
+								onChange={(e) => setMergeQuery(e.target.value)}
+								placeholder="Search Partiful players…"
+								className="border rounded px-2 py-1 text-sm w-full"
+								autoFocus
+							/>
+							{mergeQuery.trim() && (
+								<div className="border rounded overflow-hidden text-sm">
+									{mergePlayers
+										.filter((p) => {
+											const q = mergeQuery.trim().toLowerCase();
+											return (
+												(p.displayName ?? p.name).toLowerCase().includes(q) ||
+												p.name.toLowerCase().includes(q)
+											);
+										})
+										.map((p) => (
+											<button
+												key={p.userId}
+												className="w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2"
+												onClick={() => setMergeTarget(p)}
+											>
+												<span className="font-medium">
+													{p.displayName ?? p.name}
+												</span>
+												{p.displayName && (
+													<span className="text-muted-foreground text-xs">
+														{p.name}
+													</span>
+												)}
+											</button>
+										))}
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+			)}
 
 			<div className="space-y-2">
 				<h2 className="font-semibold">Run History</h2>
