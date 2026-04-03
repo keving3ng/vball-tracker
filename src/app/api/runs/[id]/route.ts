@@ -14,6 +14,15 @@ export async function GET(
 	const costPerHead =
 		r0.totalCost != null ? r0.totalCost / splitCount : (r0.costPerHead ?? null);
 
+	const priorBalances = new Map<string, number>(
+		(
+			queries.getPlayerBalancesExcludingRun.all(params.id) as {
+				userId: string;
+				balance: number;
+			}[]
+		).map((b) => [b.userId, b.balance]),
+	);
+
 	const run = {
 		eventId: r0.eventId,
 		title: r0.title,
@@ -32,6 +41,7 @@ export async function GET(
 				name: r.displayName ?? r.name,
 				partifulName: r.name,
 				rsvpStatus: r.rsvpStatus,
+				priorBalance: priorBalances.get(r.userId) ?? 0,
 				payment: {
 					amount: r.amount,
 					amountPaid: r.amountPaid,
@@ -88,6 +98,22 @@ export async function PATCH(
 					eventId: params.id,
 					userId: run.hostUserId,
 				});
+			}
+			// Auto-apply credit for non-host players with sufficient prior balance
+			for (const a of going) {
+				if (a.userId === run?.hostUserId) continue;
+				const row = queries.getPlayerBalanceExcludingRun.get(
+					a.userId,
+					params.id,
+				) as { balance: number };
+				if (row.balance >= amountOwed) {
+					queries.markHostPaid.run({
+						amount: amountOwed,
+						amountPaid: amountOwed,
+						eventId: params.id,
+						userId: a.userId,
+					});
+				}
 			}
 		}
 	}

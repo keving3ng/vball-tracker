@@ -17,6 +17,7 @@ interface Guest {
 	name: string;
 	partifulName: string;
 	rsvpStatus: string;
+	priorBalance: number;
 	payment: Payment;
 }
 
@@ -580,6 +581,7 @@ function PaymentRow({
 	const amountOwed = guest.payment?.amount ?? costPerHead;
 	const amountPaid = guest.payment?.amountPaid;
 	const isPaid = guest.payment?.amountPaid != null;
+	const credit = guest.priorBalance ?? 0;
 
 	return (
 		<div className="flex items-center px-4 py-2.5 gap-3 bg-background">
@@ -643,6 +645,11 @@ function PaymentRow({
 				{isPaid && amountPaid != null && amountPaid !== amountOwed && (
 					<span className="text-xs text-muted-foreground">
 						(paid ${amountPaid.toFixed(2)})
+					</span>
+				)}
+				{credit > 0 && (
+					<span className="text-xs text-green-600 dark:text-green-400">
+						credit ${credit.toFixed(2)}
 					</span>
 				)}
 			</div>

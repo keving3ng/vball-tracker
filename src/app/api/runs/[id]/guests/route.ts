@@ -44,6 +44,18 @@ export async function POST(
 	if (runHasHappened && run?.totalCost != null) {
 		const amount = run.totalCost / (run.splitCount ?? 12);
 		queries.upsertPaymentOwed.run({ eventId: params.id, userId, amount });
+		// Auto-apply credit if prior balance covers the cost
+		const row = queries.getPlayerBalanceExcludingRun.get(userId, params.id) as {
+			balance: number;
+		};
+		if (row.balance >= amount) {
+			queries.markHostPaid.run({
+				amount,
+				amountPaid: amount,
+				eventId: params.id,
+				userId,
+			});
+		}
 	}
 
 	return NextResponse.json({ ok: true, userId });

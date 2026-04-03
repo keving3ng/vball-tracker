@@ -285,6 +285,20 @@ export const queries = {
 		`UPDATE runs SET hostUserId = ? WHERE hostUserId = ?`,
 	),
 	deletePlayer: db.prepare(`DELETE FROM players WHERE userId = ?`),
+
+	// Returns a player's balance across all runs except the given eventId.
+	// Used to detect credit that can auto-cover a new run.
+	getPlayerBalanceExcludingRun: db.prepare(`
+    SELECT COALESCE(SUM(COALESCE(amountPaid, 0) - COALESCE(amount, 0)), 0) AS balance
+    FROM payments WHERE userId = ? AND eventId != ?
+  `),
+
+	// Batch version: all players' prior balances excluding a specific run.
+	getPlayerBalancesExcludingRun: db.prepare(`
+    SELECT userId, COALESCE(SUM(COALESCE(amountPaid, 0) - COALESCE(amount, 0)), 0) AS balance
+    FROM payments WHERE eventId != ?
+    GROUP BY userId
+  `),
 };
 
 // Merges sourceId (manual player) into targetId (Partiful player).

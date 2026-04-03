@@ -70,5 +70,24 @@ export async function POST(
 		}
 	}
 
+	// Auto-apply credit: mark paid for any GOING guest whose prior balance covers the cost
+	if (runHasHappened && amountOwed > 0) {
+		for (const guest of guests) {
+			if (guest.status !== "GOING" || guest.userId === hostUserId) continue;
+			const row = queries.getPlayerBalanceExcludingRun.get(
+				guest.userId,
+				params.id,
+			) as { balance: number };
+			if (row.balance >= amountOwed) {
+				queries.markHostPaid.run({
+					amount: amountOwed,
+					amountPaid: amountOwed,
+					eventId: params.id,
+					userId: guest.userId,
+				});
+			}
+		}
+	}
+
 	return NextResponse.json({ synced: guests.length });
 }
