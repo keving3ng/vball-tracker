@@ -11,8 +11,8 @@
 #         container_port: 3000
 #       secrets: inherit
 #
-# Required secrets (via inherit): TAILSCALE_AUTH_KEY, TAILSCALE_IP, ZOT_PASSWORD,
-#                                  JONAS_SSH_PRIVATE_KEY, DISCORD_WEBHOOK_URL
+# Required secrets (via inherit): TAILSCALE_OAUTH_CLIENT_ID, TAILSCALE_OAUTH_CLIENT_SECRET,
+#                                  TAILSCALE_IP, ZOT_PASSWORD, JONAS_SSH_PRIVATE_KEY, DISCORD_WEBHOOK_URL
 
 name: Deploy Service
 
@@ -66,7 +66,9 @@ jobs:
       - name: Tailscale
         uses: tailscale/github-action@v3
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_CLIENT_SECRET }}
+          tags: tag:ci
 
       - name: Write .npmrc for Verdaccio
         if: inputs.verdaccio_setup
