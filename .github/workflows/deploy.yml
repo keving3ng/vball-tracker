@@ -6,105 +6,12 @@ on:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout vball-tracker
-        uses: actions/checkout@v4
-
-      - name: Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
-
-      # Write .npmrc on the runner so npm install can reach Verdaccio for @keg packages.
-      # Also copied into the Docker build context via COPY package*.json ./ — no, .npmrc
-      # is handled via build-arg in the Dockerfile instead (host .npmrc not visible to buildkitd).
-      # This step exists solely to regenerate package-lock.json before the Docker build.
-      - name: Write .npmrc for Verdaccio (runner)
-        env:
-          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
-        run: |
-          echo "@keg:registry=http://${TAILSCALE_IP}:4873" > .npmrc
-          echo "//${TAILSCALE_IP}:4873/:_authToken=verdaccio-anonymous" >> .npmrc
-
-      # Regenerate package-lock.json so it includes @keg/partiful-api from Verdaccio.
-      # npm ci inside Docker requires lockfile/package.json to be in sync.
-      - name: Regenerate package-lock.json
-        run: npm install --package-lock-only
-
-      # Needed for docker/login-action (uses Docker daemon, not buildkitd)
-      - name: Configure insecure registry
-        env:
-          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
-        run: |
-          echo "{\"insecure-registries\":[\"${TAILSCALE_IP}:5000\"]}" | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker
-
-      # Needed for build-push-action (uses buildkitd, ignores daemon.json)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [registry."${{ secrets.TAILSCALE_IP }}:5000"]
-              http = true
-              insecure = true
-
-      - name: Login to Zot registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.TAILSCALE_IP }}:5000
-          username: admin
-          password: ${{ secrets.ZOT_PASSWORD }}
-
-      - name: Build and push vball-tracker
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          # VERDACCIO_URL passed as build arg so the Dockerfile can write .npmrc
-          # inside the build container before npm ci — host .npmrc not visible to buildkitd
-          build-args: |
-            VERDACCIO_URL=http://${{ secrets.TAILSCALE_IP }}:4873
-          tags: |
-            ${{ secrets.TAILSCALE_IP }}:5000/vball-tracker:latest
-            ${{ secrets.TAILSCALE_IP }}:5000/vball-tracker:${{ github.sha }}
-
-      - name: Deploy on Jonas
-        env:
-          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
-          JONAS_SSH_PRIVATE_KEY: ${{ secrets.JONAS_SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${JONAS_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh -o StrictHostKeyChecking=no \
-              -i ~/.ssh/id_ed25519 \
-              root@${TAILSCALE_IP} \
-              "docker pull ${TAILSCALE_IP}:5000/vball-tracker:latest && \
-               docker stop vball-tracker || true && \
-               docker rm vball-tracker || true && \
-               docker run -d --name vball-tracker --restart unless-stopped \
-                 -p 3000:3000 \
-                 -v /mnt/user/appdata/vball-tracker:/data \
-                 --env-file /mnt/user/appdata/vball-tracker/.env \
-                 ${TAILSCALE_IP}:5000/vball-tracker:latest"
-
-      - name: Notify Discord (success)
-        if: success()
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ **vball-tracker deploy succeeded** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
-
-      - name: Notify Discord (failure)
-        if: failure()
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ **vball-tracker deploy failed** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
+    uses: ./.github/workflows/deploy-service.yml
+    with:
+      service: vball-tracker
+      host_port: 3000
+      container_port: 3000
+      appdata_path: /mnt/user/appdata/vball-tracker
+      run_extra_args: --env-file /mnt/user/appdata/vball-tracker/.env
+      verdaccio_setup: true
+    secrets: inherit

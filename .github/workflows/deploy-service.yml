@@ -1,0 +1,176 @@
+# .github/workflows/deploy-service.yml
+# Reusable workflow — build from source → push to Zot → SSH deploy on Jonas → Discord notify
+#
+# Usage:
+#   jobs:
+#     deploy:
+#       uses: keving3ng/jonas-config/.github/workflows/deploy-service.yml@main
+#       with:
+#         service: my-service
+#         host_port: 3000
+#         container_port: 3000
+#       secrets: inherit
+#
+# Required secrets (via inherit): TAILSCALE_AUTH_KEY, TAILSCALE_IP, ZOT_PASSWORD,
+#                                  JONAS_SSH_PRIVATE_KEY, DISCORD_WEBHOOK_URL
+
+name: Deploy Service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Service name — used for image tag, container name, and Discord notifications
+        required: true
+        type: string
+      host_port:
+        description: Host port to bind
+        required: true
+        type: number
+      container_port:
+        description: Container port to expose
+        required: true
+        type: number
+      appdata_path:
+        description: Host path for persistent data; mounted at the same path in the container
+        required: false
+        type: string
+        default: ''
+      run_extra_args:
+        description: Extra args appended to docker run (e.g. --env-file /path/to/.env)
+        required: false
+        type: string
+        default: ''
+      build_context:
+        description: Docker build context path
+        required: false
+        type: string
+        default: '.'
+      dockerfile:
+        description: Path to Dockerfile (omit to use default)
+        required: false
+        type: string
+        default: ''
+      verdaccio_setup:
+        description: Write .npmrc for @keg packages and regenerate package-lock.json before build
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTH_KEY }}
+
+      - name: Write .npmrc for Verdaccio
+        if: inputs.verdaccio_setup
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+        run: |
+          echo "@keg:registry=http://${TAILSCALE_IP}:4873" > .npmrc
+          echo "//${TAILSCALE_IP}:4873/:_authToken=verdaccio-anonymous" >> .npmrc
+
+      - name: Regenerate package-lock.json
+        if: inputs.verdaccio_setup
+        run: npm install --package-lock-only
+
+      - name: Configure insecure registry
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+        run: |
+          echo "{\"insecure-registries\":[\"${TAILSCALE_IP}:5000\"]}" | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          buildkitd-config-inline: |
+            [registry."${{ secrets.TAILSCALE_IP }}:5000"]
+              http = true
+              insecure = true
+
+      - name: Login to Zot registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.TAILSCALE_IP }}:5000
+          username: admin
+          password: ${{ secrets.ZOT_PASSWORD }}
+
+      - name: Prepare build args
+        id: prep
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+        run: |
+          if [ "${{ inputs.verdaccio_setup }}" = "true" ]; then
+            echo "build_args=VERDACCIO_URL=http://${TAILSCALE_IP}:4873" >> "$GITHUB_OUTPUT"
+          else
+            echo "build_args=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push ${{ inputs.service }}
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ inputs.build_context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: ${{ steps.prep.outputs.build_args }}
+          tags: |
+            ${{ secrets.TAILSCALE_IP }}:5000/${{ inputs.service }}:latest
+            ${{ secrets.TAILSCALE_IP }}:5000/${{ inputs.service }}:${{ github.sha }}
+
+      - name: Deploy on Jonas
+        env:
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
+          JONAS_SSH_PRIVATE_KEY: ${{ secrets.JONAS_SSH_PRIVATE_KEY }}
+          SERVICE: ${{ inputs.service }}
+          HOST_PORT: ${{ inputs.host_port }}
+          CONTAINER_PORT: ${{ inputs.container_port }}
+          APPDATA_PATH: ${{ inputs.appdata_path }}
+          RUN_EXTRA_ARGS: ${{ inputs.run_extra_args }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${JONAS_SSH_PRIVATE_KEY}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          VOLUME_ARG=""
+          if [ -n "${APPDATA_PATH}" ]; then
+            VOLUME_ARG="-v ${APPDATA_PATH}:${APPDATA_PATH}"
+          fi
+
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/id_ed25519 "root@${TAILSCALE_IP}" \
+            "docker pull ${TAILSCALE_IP}:5000/${SERVICE}:latest && \
+             docker stop ${SERVICE} || true && \
+             docker rm ${SERVICE} || true && \
+             docker run -d --name ${SERVICE} --restart unless-stopped \
+               -p ${HOST_PORT}:${CONTAINER_PORT} \
+               ${VOLUME_ARG} \
+               ${RUN_EXTRA_ARGS} \
+               ${TAILSCALE_IP}:5000/${SERVICE}:latest"
+
+      - name: Notify Discord (success)
+        if: success()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
+            -d "{\"content\": \"✅ **${SERVICE} deploy succeeded** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
+
+      - name: Notify Discord (failure)
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SHA: ${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SERVICE: ${{ inputs.service }}
+        run: |
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" -H "Content-Type: application/json" \
+            -d "{\"content\": \"❌ **${SERVICE} deploy failed** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
