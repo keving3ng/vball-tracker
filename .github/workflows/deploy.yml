@@ -6,7 +6,7 @@ on:
 
 jobs:
   deploy:
-    uses: ./.github/workflows/deploy-service.yml
+    uses: keving3ng/jonas-config/.github/workflows/deploy-service.yml@main
     with:
       service: vball-tracker
       host_port: 3000
