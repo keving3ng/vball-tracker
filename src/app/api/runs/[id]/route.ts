@@ -49,6 +49,8 @@ export async function GET(
 					method: r.method,
 					note: r.note,
 				},
+				plusOneOf: (r.plus_one_of as string | null) ?? null,
+				isAnonPlusOne: Boolean(r.is_anon_plus_one),
 			})),
 	};
 
