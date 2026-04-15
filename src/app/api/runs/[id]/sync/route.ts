@@ -45,9 +45,9 @@ export async function POST(
 		}
 
 		// Handle +1s: guest.count = total headcount including the guest themselves
+		purgePlusOnesForHost(params.id, guest.userId);
 		const plusOneCount = (guest.count ?? 1) - 1;
 		if (plusOneCount > 0) {
-			purgePlusOnesForHost(params.id, guest.userId);
 			for (let i = 0; i < plusOneCount; i++) {
 				const plusOneUserId = `${guest.userId}__plus1__${params.id}__${i}`;
 				queries.upsertAnonPlusOnePlayer.run({ userId: plusOneUserId });

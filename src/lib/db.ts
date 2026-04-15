@@ -71,7 +71,7 @@ export interface Player {
 	name: string;
 	displayName: string | null;
 	notes: string | null;
-	isAnonPlusOne: boolean;
+	isAnonPlusOne: number;
 }
 export interface Run {
 	eventId: string;
