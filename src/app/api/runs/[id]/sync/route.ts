@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEventGuests } from "@keg/partiful-api";
-import { queries } from "@/lib/db";
+import { queries, purgePlusOnesForHost } from "@/lib/db";
 
 export async function POST(
 	_req: Request,
@@ -42,6 +42,31 @@ export async function POST(
 			});
 		} else if (guest.status !== "GOING") {
 			queries.deleteUnpaidPayment.run(params.id, guest.userId);
+		}
+
+		// Handle +1s: guest.count = total headcount including the guest themselves
+		const plusOneCount = (guest.count ?? 1) - 1;
+		if (plusOneCount > 0) {
+			purgePlusOnesForHost(params.id, guest.userId);
+			for (let i = 0; i < plusOneCount; i++) {
+				const plusOneUserId = `${guest.userId}__plus1__${params.id}__${i}`;
+				queries.upsertAnonPlusOnePlayer.run({ userId: plusOneUserId });
+				queries.upsertAttendancePlusOne.run({
+					eventId: params.id,
+					userId: plusOneUserId,
+					rsvpStatus: guest.status,
+					plusOneOf: guest.userId,
+				});
+				if (runHasHappened && guest.status === "GOING" && amountOwed > 0) {
+					queries.upsertPaymentOwed.run({
+						eventId: params.id,
+						userId: plusOneUserId,
+						amount: amountOwed,
+					});
+				} else if (guest.status !== "GOING") {
+					queries.deleteUnpaidPayment.run(params.id, plusOneUserId);
+				}
+			}
 		}
 	}
 
@@ -89,5 +114,10 @@ export async function POST(
 		}
 	}
 
-	return NextResponse.json({ synced: guests.length });
+	// Count total headcount including +1s
+	const totalHeadcount = guests.reduce(
+		(sum: number, g: any) => sum + (g.count ?? 1),
+		0,
+	);
+	return NextResponse.json({ synced: guests.length, totalHeadcount });
 }

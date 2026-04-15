@@ -58,6 +58,8 @@ for (const sql of [
 	`ALTER TABLE players ADD COLUMN notes TEXT`,
 	`ALTER TABLE payments ADD COLUMN amountPaid REAL`,
 	`ALTER TABLE runs ADD COLUMN hostUserId TEXT`,
+	`ALTER TABLE attendance ADD COLUMN plus_one_of TEXT`,
+	`ALTER TABLE players ADD COLUMN is_anon_plus_one INTEGER DEFAULT 0`,
 ]) {
 	try {
 		db.exec(sql);
@@ -69,6 +71,7 @@ export interface Player {
 	name: string;
 	displayName: string | null;
 	notes: string | null;
+	isAnonPlusOne: boolean;
 }
 export interface Run {
 	eventId: string;
@@ -86,6 +89,7 @@ export interface AttendanceRow {
 	eventId: string;
 	userId: string;
 	rsvpStatus: string;
+	plusOneOf: string | null;
 }
 export interface PaymentRow {
 	eventId: string;
@@ -189,8 +193,8 @@ export const queries = {
 	getRunWithGuests: db.prepare(`
     SELECT
       r.*,
-      a.userId, a.rsvpStatus,
-      p.name, p.displayName,
+      a.userId, a.rsvpStatus, a.plus_one_of,
+      p.name, p.displayName, p.is_anon_plus_one,
       pay.amount, pay.amountPaid, pay.method, pay.note
     FROM runs r
     LEFT JOIN attendance a ON a.eventId = r.eventId
@@ -216,6 +220,7 @@ export const queries = {
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
     LEFT JOIN runs r ON r.eventId = a.eventId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
+    WHERE (p.is_anon_plus_one IS NULL OR p.is_anon_plus_one = 0)
     GROUP BY p.userId
     ORDER BY totalRuns DESC
   `),
@@ -249,7 +254,9 @@ export const queries = {
   `),
 
 	getAllPlayersBasic: db.prepare(`
-    SELECT userId, name, displayName FROM players ORDER BY COALESCE(displayName, name) COLLATE NOCASE
+    SELECT userId, name, displayName FROM players
+    WHERE (is_anon_plus_one IS NULL OR is_anon_plus_one = 0)
+    ORDER BY COALESCE(displayName, name) COLLATE NOCASE
   `),
 
 	getPlayerBasic: db.prepare(
@@ -285,6 +292,31 @@ export const queries = {
 		`UPDATE runs SET hostUserId = ? WHERE hostUserId = ?`,
 	),
 	deletePlayer: db.prepare(`DELETE FROM players WHERE userId = ?`),
+
+	// Plus-one helpers
+	upsertAnonPlusOnePlayer: db.prepare(`
+    INSERT INTO players (userId, name, is_anon_plus_one, updatedAt)
+    VALUES (@userId, '+1', 1, datetime('now'))
+    ON CONFLICT(userId) DO UPDATE SET updatedAt=datetime('now')
+  `),
+
+	upsertAttendancePlusOne: db.prepare(`
+    INSERT INTO attendance (eventId, userId, rsvpStatus, plus_one_of)
+    VALUES (@eventId, @userId, @rsvpStatus, @plusOneOf)
+    ON CONFLICT(eventId, userId) DO UPDATE SET rsvpStatus=excluded.rsvpStatus, plus_one_of=excluded.plus_one_of
+  `),
+
+	deletePlusOneAttendance: db.prepare(`
+    DELETE FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
+  `),
+
+	deletePlusOnePaymentsByPattern: db.prepare(`
+    DELETE FROM payments WHERE eventId = @eventId AND userId LIKE @pattern
+  `),
+
+	deletePlusOnePlayersByPattern: db.prepare(`
+    DELETE FROM players WHERE is_anon_plus_one = 1 AND userId LIKE @pattern
+  `),
 
 	// Returns a player's balance across all runs except the given eventId.
 	// Used to detect credit that can auto-cover a new run.
@@ -329,6 +361,17 @@ export const mergePlayerIntoTarget = db.transaction(
 
 		queries.updateRunHostUser.run(targetId, sourceId);
 		queries.deletePlayer.run(sourceId);
+	},
+);
+
+// Purges all synthetic +1 rows for a given host at a given event.
+// Run before re-inserting +1s so the count stays accurate on re-sync.
+export const purgePlusOnesForHost = db.transaction(
+	(eventId: string, hostUserId: string) => {
+		const pattern = `${hostUserId}__plus1__${eventId}__%`;
+		queries.deletePlusOnePaymentsByPattern.run({ eventId, pattern });
+		queries.deletePlusOneAttendance.run({ hostUserId, eventId });
+		queries.deletePlusOnePlayersByPattern.run({ pattern });
 	},
 );
 
