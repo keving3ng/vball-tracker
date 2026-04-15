@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface Payment {
 	amount: number;
@@ -246,7 +247,13 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const costPerHead = run.costPerHead ?? 0;
 
 	// Separate primary guests from +1s and build host → plusOnes map
-	const primaryGoing = going.filter((g) => !g.plusOneOf);
+	// A +1 whose host is not in GOING is treated as primary so it always appears.
+	const primaryGoingIds = new Set(
+		going.filter((g) => !g.plusOneOf).map((g) => g.userId),
+	);
+	const primaryGoing = going.filter(
+		(g) => !g.plusOneOf || !primaryGoingIds.has(g.plusOneOf),
+	);
 	const plusOneMap = new Map<string, Guest[]>();
 	for (const g of going) {
 		if (g.plusOneOf) {
@@ -546,7 +553,10 @@ function GuestRow({
 	const isPaid = guest.payment?.amountPaid != null;
 	return (
 		<div
-			className={`flex items-center px-4 py-2.5 gap-3 bg-background${isSubRow ? " pl-10" : ""}`}
+			className={cn(
+				"flex items-center px-4 py-2.5 gap-3 bg-background",
+				isSubRow && "pl-10",
+			)}
 		>
 			<Button
 				variant={isPaid ? "default" : "outline"}
@@ -642,7 +652,10 @@ function PaymentRow({
 
 	return (
 		<div
-			className={`flex items-center px-4 py-2.5 gap-3 bg-background${isSubRow ? " pl-10" : ""}`}
+			className={cn(
+				"flex items-center px-4 py-2.5 gap-3 bg-background",
+				isSubRow && "pl-10",
+			)}
 		>
 			{!isPaid && editingAmount ? (
 				<>
