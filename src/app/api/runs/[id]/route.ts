@@ -49,7 +49,7 @@ export async function GET(
 					method: r.method,
 					note: r.note,
 				},
-				plusOneOf: (r.plus_one_of as string | null) ?? null,
+				plusOneOf: typeof r.plus_one_of === "string" ? r.plus_one_of : null,
 				isAnonPlusOne: Boolean(r.is_anon_plus_one),
 			})),
 	};
