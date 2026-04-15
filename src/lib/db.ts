@@ -310,12 +310,16 @@ export const queries = {
     DELETE FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
   `),
 
-	deletePlusOnePaymentsByPattern: db.prepare(`
-    DELETE FROM payments WHERE eventId = @eventId AND userId LIKE @pattern
+	deletePlusOnePayments: db.prepare(`
+    DELETE FROM payments WHERE eventId = @eventId AND userId IN (
+      SELECT userId FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
+    )
   `),
 
-	deletePlusOnePlayersByPattern: db.prepare(`
-    DELETE FROM players WHERE is_anon_plus_one = 1 AND userId LIKE @pattern
+	deletePlusOnePlayers: db.prepare(`
+    DELETE FROM players WHERE is_anon_plus_one = 1 AND userId IN (
+      SELECT userId FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
+    )
   `),
 
 	// Returns a player's balance across all runs except the given eventId.
@@ -368,10 +372,9 @@ export const mergePlayerIntoTarget = db.transaction(
 // Run before re-inserting +1s so the count stays accurate on re-sync.
 export const purgePlusOnesForHost = db.transaction(
 	(eventId: string, hostUserId: string) => {
-		const pattern = `${hostUserId}__plus1__${eventId}__%`;
-		queries.deletePlusOnePaymentsByPattern.run({ eventId, pattern });
+		queries.deletePlusOnePayments.run({ eventId, hostUserId });
 		queries.deletePlusOneAttendance.run({ hostUserId, eventId });
-		queries.deletePlusOnePlayersByPattern.run({ pattern });
+		queries.deletePlusOnePlayers.run({ eventId, hostUserId });
 	},
 );
 

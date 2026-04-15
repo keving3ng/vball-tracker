@@ -114,10 +114,5 @@ export async function POST(
 		}
 	}
 
-	// Count total headcount including +1s
-	const totalHeadcount = guests.reduce(
-		(sum: number, g: any) => sum + (g.count ?? 1),
-		0,
-	);
-	return NextResponse.json({ synced: guests.length, totalHeadcount });
+	return NextResponse.json({ synced: guests.length });
 }
