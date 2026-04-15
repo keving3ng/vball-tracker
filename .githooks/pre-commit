@@ -1,0 +1,23 @@
+#!/bin/sh
+# Bump patch version in package.json + package-lock.json, then run TypeScript check.
+
+# --- Version bump ---
+NEW_VERSION=$(node -e "
+  const [a,b,c] = require('./package.json').version.split('.').map(Number);
+  console.log(a + '.' + b + '.' + (c+1));
+")
+jq ".version = \"$NEW_VERSION\"" package.json > /tmp/vball_pkg.json && mv /tmp/vball_pkg.json package.json
+jq ".version = \"$NEW_VERSION\" | .packages[\"\"].version = \"$NEW_VERSION\"" package-lock.json > /tmp/vball_lock.json && mv /tmp/vball_lock.json package-lock.json
+git add package.json package-lock.json
+echo "  → Bumped to v$NEW_VERSION"
+
+# --- TypeScript check ---
+# Filters out expected @keg/partiful-api module-not-found errors (requires Tailscale/VPN).
+output=$(npx tsc --noEmit 2>&1)
+filtered=$(echo "$output" | grep -v "Cannot find module '@keg/partiful-api'")
+if echo "$filtered" | grep -q "error TS"; then
+  echo "TypeScript errors found:"
+  echo "$filtered" | grep "error TS"
+  exit 1
+fi
+exit 0
