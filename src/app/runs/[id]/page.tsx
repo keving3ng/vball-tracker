@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Fragment, useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 
@@ -19,6 +19,8 @@ interface Guest {
 	rsvpStatus: string;
 	priorBalance: number;
 	payment: Payment;
+	plusOneOf: string | null;
+	isAnonPlusOne: boolean;
 }
 
 interface Run {
@@ -243,6 +245,17 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const paid = going.filter((g) => g.payment?.amountPaid != null);
 	const costPerHead = run.costPerHead ?? 0;
 
+	// Separate primary guests from +1s and build host → plusOnes map
+	const primaryGoing = going.filter((g) => !g.plusOneOf);
+	const plusOneMap = new Map<string, Guest[]>();
+	for (const g of going) {
+		if (g.plusOneOf) {
+			const list = plusOneMap.get(g.plusOneOf) ?? [];
+			list.push(g);
+			plusOneMap.set(g.plusOneOf, list);
+		}
+	}
+
 	return (
 		<div className="space-y-5">
 			{/* Header */}
@@ -326,14 +339,28 @@ export default function RunPage({ params }: { params: { id: string } }) {
 					<div className="space-y-3">
 						{going.length > 0 && (
 							<div className="rounded-lg border overflow-hidden divide-y">
-								{going.map((guest) => (
-									<GuestRow
-										key={guest.userId}
-										guest={guest}
-										costPerHead={costPerHead}
-										onRecord={recordPayment}
-									/>
-								))}
+								{primaryGoing.map((guest) => {
+									const plusOnes = plusOneMap.get(guest.userId) ?? [];
+									return (
+										<Fragment key={guest.userId}>
+											<GuestRow
+												guest={guest}
+												costPerHead={costPerHead}
+												onRecord={recordPayment}
+												plusOneCount={plusOnes.length}
+											/>
+											{plusOnes.map((p1) => (
+												<GuestRow
+													key={p1.userId}
+													guest={p1}
+													costPerHead={costPerHead}
+													onRecord={recordPayment}
+													isSubRow
+												/>
+											))}
+										</Fragment>
+									);
+								})}
 							</div>
 						)}
 
@@ -386,19 +413,33 @@ export default function RunPage({ params }: { params: { id: string } }) {
 						/>
 						<HostSection
 							hostUserId={run.hostUserId}
-							going={going}
+							going={going.filter((g) => !g.isAnonPlusOne)}
 							onUpdate={updateHost}
 						/>
 						{going.length > 0 && (
 							<div className="rounded-lg border overflow-hidden divide-y">
-								{going.map((guest) => (
-									<PaymentRow
-										key={guest.userId}
-										guest={guest}
-										costPerHead={costPerHead}
-										onRecord={recordPayment}
-									/>
-								))}
+								{primaryGoing.map((guest) => {
+									const plusOnes = plusOneMap.get(guest.userId) ?? [];
+									return (
+										<Fragment key={guest.userId}>
+											<PaymentRow
+												guest={guest}
+												costPerHead={costPerHead}
+												onRecord={recordPayment}
+												plusOneCount={plusOnes.length}
+											/>
+											{plusOnes.map((p1) => (
+												<PaymentRow
+													key={p1.userId}
+													guest={p1}
+													costPerHead={costPerHead}
+													onRecord={recordPayment}
+													isSubRow
+												/>
+											))}
+										</Fragment>
+									);
+								})}
 							</div>
 						)}
 					</div>
@@ -488,6 +529,8 @@ function GuestRow({
 	guest,
 	costPerHead,
 	onRecord,
+	plusOneCount = 0,
+	isSubRow = false,
 }: {
 	guest: Guest;
 	costPerHead: number;
@@ -496,11 +539,15 @@ function GuestRow({
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
+	plusOneCount?: number;
+	isSubRow?: boolean;
 }) {
 	const amountOwed = guest.payment?.amount ?? costPerHead;
 	const isPaid = guest.payment?.amountPaid != null;
 	return (
-		<div className="flex items-center px-4 py-2.5 gap-3 bg-background">
+		<div
+			className={`flex items-center px-4 py-2.5 gap-3 bg-background${isSubRow ? " pl-10" : ""}`}
+		>
 			<Button
 				variant={isPaid ? "default" : "outline"}
 				size="sm"
@@ -512,6 +559,11 @@ function GuestRow({
 			</Button>
 			<div className="flex items-center gap-2.5">
 				<span className="font-medium">{guest.name}</span>
+				{plusOneCount > 0 && (
+					<span className="text-xs text-muted-foreground">
+						(+{plusOneCount})
+					</span>
+				)}
 				{guest.userId.startsWith("manual-") && (
 					<span className="text-xs text-muted-foreground bg-muted px-1 rounded">
 						manual
@@ -568,6 +620,8 @@ function PaymentRow({
 	guest,
 	costPerHead,
 	onRecord,
+	plusOneCount = 0,
+	isSubRow = false,
 }: {
 	guest: Guest;
 	costPerHead: number;
@@ -576,6 +630,8 @@ function PaymentRow({
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
+	plusOneCount?: number;
+	isSubRow?: boolean;
 }) {
 	const [editingAmount, setEditingAmount] = useState(false);
 	const [customAmount, setCustomAmount] = useState("");
@@ -585,7 +641,9 @@ function PaymentRow({
 	const credit = guest.priorBalance ?? 0;
 
 	return (
-		<div className="flex items-center px-4 py-2.5 gap-3 bg-background">
+		<div
+			className={`flex items-center px-4 py-2.5 gap-3 bg-background${isSubRow ? " pl-10" : ""}`}
+		>
 			{!isPaid && editingAmount ? (
 				<>
 					<input
@@ -640,6 +698,11 @@ function PaymentRow({
 			)}
 			<div className="flex items-center gap-3">
 				<span className="font-medium">{guest.name}</span>
+				{plusOneCount > 0 && (
+					<span className="text-xs text-muted-foreground">
+						(+{plusOneCount})
+					</span>
+				)}
 				<span className="text-sm text-muted-foreground">
 					${amountOwed.toFixed(2)}
 				</span>
