@@ -44,6 +44,16 @@ interface Preset {
 	splitCount: number;
 }
 
+interface AuditLogEntry {
+	id: number;
+	userId: string;
+	action: string;
+	amount: number | null;
+	amountPaid: number | null;
+	changedAt: string;
+	playerName: string;
+}
+
 interface PlayerBasic {
 	userId: string;
 	name: string;
@@ -59,6 +69,16 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const [newGuestName, setNewGuestName] = useState("");
 	const [allPlayers, setAllPlayers] = useState<PlayerBasic[]>([]);
 	const [activeTab, setActiveTab] = useState<"guests" | "payments">("guests");
+	const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
+	const [auditLogLoaded, setAuditLogLoaded] = useState(false);
+	const [auditLogOpen, setAuditLogOpen] = useState(false);
+
+	const loadAuditLog = useCallback(async () => {
+		if (auditLogLoaded) return;
+		const res = await fetch(`/api/runs/${params.id}/audit-log`);
+		if (res.ok) setAuditLog(await res.json());
+		setAuditLogLoaded(true);
+	}, [params.id, auditLogLoaded]);
 
 	const sync = useCallback(async () => {
 		setSyncing(true);
@@ -449,6 +469,15 @@ export default function RunPage({ params }: { params: { id: string } }) {
 								})}
 							</div>
 						)}
+						<PaymentHistorySection
+							entries={auditLog}
+							loaded={auditLogLoaded}
+							open={auditLogOpen}
+							onToggle={() => {
+								if (!auditLogOpen) loadAuditLog();
+								setAuditLogOpen((v) => !v);
+							}}
+						/>
 					</div>
 				)}
 			</div>
@@ -877,6 +906,76 @@ function NotesField({
 					Cancel
 				</Button>
 			</div>
+		</div>
+	);
+}
+
+function PaymentHistorySection({
+	entries,
+	loaded,
+	open,
+	onToggle,
+}: {
+	entries: AuditLogEntry[];
+	loaded: boolean;
+	open: boolean;
+	onToggle: () => void;
+}) {
+	const fmt = (iso: string) =>
+		new Date(iso).toLocaleString("en-CA", {
+			month: "short",
+			day: "numeric",
+			hour: "numeric",
+			minute: "2-digit",
+			timeZone: "America/Toronto",
+		});
+
+	return (
+		<div className="border rounded-lg overflow-hidden">
+			<button
+				onClick={onToggle}
+				className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+			>
+				<span>Payment history</span>
+				<span className="text-muted-foreground">{open ? "▲" : "▼"}</span>
+			</button>
+			{open && (
+				<div className="divide-y border-t">
+					{!loaded ? (
+						<p className="px-4 py-3 text-sm text-muted-foreground">Loading…</p>
+					) : entries.length === 0 ? (
+						<p className="px-4 py-3 text-sm text-muted-foreground">
+							No payment history yet.
+						</p>
+					) : (
+						entries.map((e) => (
+							<div
+								key={e.id}
+								className="px-4 py-2.5 flex items-baseline gap-3 text-sm"
+							>
+								<span className="font-medium">{e.playerName}</span>
+								<span
+									className={
+										e.action === "marked_paid"
+											? "text-green-600 dark:text-green-400"
+											: "text-muted-foreground"
+									}
+								>
+									{e.action === "marked_paid" ? "paid" : "unpaid"}
+								</span>
+								{e.amountPaid != null && (
+									<span className="text-muted-foreground">
+										${e.amountPaid.toFixed(2)}
+									</span>
+								)}
+								<span className="ml-auto text-xs text-muted-foreground">
+									{fmt(e.changedAt)}
+								</span>
+							</div>
+						))
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
