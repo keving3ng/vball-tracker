@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { PaymentAuditAction } from "@/lib/db";
+import Link from "next/link";
 
 interface Payment {
 	amount: number;
@@ -28,6 +29,7 @@ interface Guest {
 interface Run {
 	eventId: string;
 	title: string;
+	displayTitle: string | null;
 	startDate: string | null;
 	capacity: number | null;
 	totalCost: number | null;
@@ -72,6 +74,9 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const [auditLog, setAuditLog] = useState<AuditLogEntry[]>([]);
 	const [auditLogLoaded, setAuditLogLoaded] = useState(false);
 	const [auditLogOpen, setAuditLogOpen] = useState(false);
+	const [editingTitle, setEditingTitle] = useState(false);
+	const [titleVal, setTitleVal] = useState("");
+	const [reminderCopied, setReminderCopied] = useState(false);
 
 	const loadAuditLog = useCallback(
 		async (force = false) => {
@@ -230,6 +235,26 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		});
 	};
 
+	const updateDisplayTitle = async (displayTitle: string | null) => {
+		await fetch(`/api/runs/${params.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ displayTitle }),
+		});
+		setRun((prev) => (prev ? { ...prev, displayTitle } : prev));
+		setEditingTitle(false);
+	};
+
+	const copyEventReminder = async () => {
+		if (!run) return;
+		const price =
+			run.costPerHead != null ? `$${run.costPerHead.toFixed(2)}` : "the cost";
+		const msg = `Hi all, please etransfer kevingeng33@gmail.com ${price}! Thanks!`;
+		await navigator.clipboard.writeText(msg);
+		setReminderCopied(true);
+		setTimeout(() => setReminderCopied(false), 2000);
+	};
+
 	const savePreset = async () => {
 		if (!run?.totalCost) return;
 		const name = window.prompt('Preset name (e.g. "Weekday $90 / 12"):');
@@ -302,7 +327,50 @@ export default function RunPage({ params }: { params: { id: string } }) {
 			{/* Header */}
 			<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
 				<div className="space-y-1">
-					<h1 className="text-2xl font-bold">{run.title}</h1>
+					{editingTitle ? (
+						<div className="flex items-center gap-2">
+							<input
+								value={titleVal}
+								onChange={(e) => setTitleVal(e.target.value)}
+								className="text-2xl font-bold border-b border-input bg-transparent outline-none"
+								autoFocus
+								onKeyDown={(e) => {
+									if (e.key === "Enter")
+										updateDisplayTitle(titleVal.trim() || null);
+									if (e.key === "Escape") setEditingTitle(false);
+								}}
+							/>
+							<Button
+								size="sm"
+								onClick={() => updateDisplayTitle(titleVal.trim() || null)}
+							>
+								Save
+							</Button>
+							<Button
+								size="sm"
+								variant="ghost"
+								onClick={() => setEditingTitle(false)}
+							>
+								✕
+							</Button>
+						</div>
+					) : (
+						<h1
+							className="text-2xl font-bold cursor-pointer hover:underline decoration-dotted"
+							onClick={() => {
+								setTitleVal(run.displayTitle ?? "");
+								setEditingTitle(true);
+							}}
+							title="Click to set custom display name"
+						>
+							{run.displayTitle ?? run.title}
+						</h1>
+					)}
+					{run.displayTitle && (
+						<p className="text-xs text-muted-foreground">
+							Partiful: {run.title}
+						</p>
+					)}
 					<p className="text-muted-foreground text-sm">
 						{run.startDate
 							? new Date(run.startDate).toLocaleDateString("en-CA", {
@@ -318,7 +386,12 @@ export default function RunPage({ params }: { params: { id: string } }) {
 					</p>
 					<NotesField value={run.notes} onSave={updateNotes} />
 				</div>
-				<div className="flex gap-2 self-start">
+				<div className="flex gap-2 self-start flex-wrap justify-end">
+					{run.costPerHead != null && (
+						<Button onClick={copyEventReminder} variant="outline" size="sm">
+							{reminderCopied ? "Copied!" : "Copy reminder"}
+						</Button>
+					)}
 					<a
 						href={`https://partiful.com/events/${run.eventId}`}
 						target="_blank"
@@ -483,18 +556,19 @@ export default function RunPage({ params }: { params: { id: string } }) {
 								})}
 							</div>
 						)}
-						<PaymentHistorySection
-							entries={auditLog}
-							loaded={auditLogLoaded}
-							open={auditLogOpen}
-							onToggle={() => {
-								if (!auditLogOpen) loadAuditLog();
-								setAuditLogOpen((v) => !v);
-							}}
-						/>
 					</div>
 				)}
 			</div>
+
+			<PaymentHistorySection
+				entries={auditLog}
+				loaded={auditLogLoaded}
+				open={auditLogOpen}
+				onToggle={() => {
+					if (!auditLogOpen) loadAuditLog();
+					setAuditLogOpen((v) => !v);
+				}}
+			/>
 
 			{run.syncedAt && (
 				<p className="text-xs text-muted-foreground">
@@ -611,7 +685,13 @@ function GuestRow({
 				{isPaid ? "✓ Paid" : "Mark Paid"}
 			</Button>
 			<div className="flex items-center gap-2.5">
-				<span className="font-medium">{guest.name}</span>
+				<Link
+					href={`/players/${guest.userId}`}
+					className="font-medium hover:underline"
+					onClick={(e) => e.stopPropagation()}
+				>
+					{guest.name}
+				</Link>
 				{plusOneCount > 0 && (
 					<span className="text-xs text-muted-foreground">
 						(+{plusOneCount})
@@ -630,7 +710,12 @@ function GuestRow({
 function NonGoingGuestRow({ guest }: { guest: Guest }) {
 	return (
 		<div className="flex items-center px-4 py-2.5 gap-2.5 bg-background">
-			<span className="font-medium">{guest.name}</span>
+			<Link
+				href={`/players/${guest.userId}`}
+				className="font-medium hover:underline"
+			>
+				{guest.name}
+			</Link>
 			<RsvpBadge status={guest.rsvpStatus} />
 			{guest.userId.startsWith("manual-") && (
 				<span className="text-xs text-muted-foreground bg-muted px-1 rounded">
@@ -753,7 +838,12 @@ function PaymentRow({
 				</>
 			)}
 			<div className="flex items-center gap-3">
-				<span className="font-medium">{guest.name}</span>
+				<Link
+					href={`/players/${guest.userId}`}
+					className="font-medium hover:underline"
+				>
+					{guest.name}
+				</Link>
 				{plusOneCount > 0 && (
 					<span className="text-xs text-muted-foreground">
 						(+{plusOneCount})
@@ -967,7 +1057,12 @@ function PaymentHistorySection({
 								key={e.id}
 								className="px-4 py-2.5 flex items-baseline gap-3 text-sm"
 							>
-								<span className="font-medium">{e.playerName}</span>
+								<Link
+									href={`/players/${e.userId}`}
+									className="font-medium hover:underline"
+								>
+									{e.playerName}
+								</Link>
 								<span
 									className={
 										e.action === "marked_paid"
