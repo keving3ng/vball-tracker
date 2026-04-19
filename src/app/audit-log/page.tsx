@@ -7,11 +7,16 @@ import type { GlobalPaymentAuditLogRow } from "@/lib/db";
 export default function AuditLogPage() {
 	const [entries, setEntries] = useState<GlobalPaymentAuditLogRow[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		fetch("/api/audit-log")
-			.then((r) => r.json())
+			.then((r) => {
+				if (!r.ok) throw new Error(`Failed to load audit log: ${r.status}`);
+				return r.json();
+			})
 			.then(setEntries)
+			.catch((e) => setError(e instanceof Error ? e.message : "Unknown error"))
 			.finally(() => setLoading(false));
 	}, []);
 
@@ -25,6 +30,7 @@ export default function AuditLogPage() {
 		});
 
 	if (loading) return <p className="text-muted-foreground">Loading...</p>;
+	if (error) return <p className="text-destructive">Error: {error}</p>;
 
 	return (
 		<div className="space-y-4">
