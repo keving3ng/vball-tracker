@@ -10,11 +10,25 @@ function isVballEvent(event: { title?: string }) {
 	return VBALL_RE.test(event.title ?? "");
 }
 
+interface PartifulEventRaw {
+	id: string;
+	title: string;
+	startDate: string | null;
+	status: string;
+}
+
+interface EnrichedEvent extends PartifulEventRaw {
+	displayTitle: string | null;
+	paidCount: number;
+	totalCount: number;
+}
+
 export async function GET() {
 	const [upcoming, past] = await Promise.all([
 		getUpcomingEvents(),
 		getPastEvents(),
 	]);
+
 	const manualRuns = (
 		queries.getManualRuns.all() as {
 			eventId: string;
@@ -34,14 +48,39 @@ export async function GET() {
 	);
 	const pastManual = manualRuns.filter((r) => r.startDate && r.startDate < now);
 
+	// Build enrichment maps from local DB
+	const displayTitleRows = queries.getRunDisplayTitles.all() as {
+		eventId: string;
+		displayTitle: string | null;
+	}[];
+	const displayTitleMap = new Map(
+		displayTitleRows.map((r) => [r.eventId, r.displayTitle]),
+	);
+
+	const paymentSummaryRows = queries.getPaymentSummaries.all() as {
+		eventId: string;
+		paidCount: number;
+		totalCount: number;
+	}[];
+	const paymentMap = new Map(paymentSummaryRows.map((s) => [s.eventId, s]));
+
+	const enrich = (event: PartifulEventRaw): EnrichedEvent => ({
+		...event,
+		displayTitle: displayTitleMap.get(event.id) ?? null,
+		paidCount: paymentMap.get(event.id)?.paidCount ?? 0,
+		totalCount: paymentMap.get(event.id)?.totalCount ?? 0,
+	});
+
 	return NextResponse.json({
 		upcoming: [
-			...(upcoming.result.data.upcomingEvents ?? []).filter(isVballEvent),
-			...upcomingManual,
+			...(upcoming.result.data.upcomingEvents ?? [])
+				.filter(isVballEvent)
+				.map(enrich),
+			...upcomingManual.map(enrich),
 		],
 		past: [
-			...(past.result.data.pastEvents ?? []).filter(isVballEvent),
-			...pastManual,
+			...(past.result.data.pastEvents ?? []).filter(isVballEvent).map(enrich),
+			...pastManual.map(enrich),
 		],
 	});
 }
@@ -61,7 +100,10 @@ export async function POST(request: Request): Promise<NextResponse> {
 	return NextResponse.json({
 		id: eventId,
 		title: title.trim(),
+		displayTitle: null,
 		startDate: startDate ?? null,
 		status: "manual",
+		paidCount: 0,
+		totalCount: 0,
 	});
 }

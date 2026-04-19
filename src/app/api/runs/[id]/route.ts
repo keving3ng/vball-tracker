@@ -26,6 +26,7 @@ export async function GET(
 	const run = {
 		eventId: r0.eventId,
 		title: r0.title,
+		displayTitle: (r0.displayTitle as string | null) ?? null,
 		startDate: r0.startDate,
 		capacity: r0.capacity,
 		totalCost: r0.totalCost,
@@ -118,6 +119,12 @@ export async function PATCH(
 				}
 			}
 		}
+	}
+	if ("displayTitle" in body) {
+		queries.updateRunDisplayTitle.run({
+			eventId: params.id,
+			displayTitle: body.displayTitle ?? null,
+		});
 	}
 	if (body.notes !== undefined) {
 		queries.updateRunNotes.run({ eventId: params.id, notes: body.notes });
