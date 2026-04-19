@@ -208,8 +208,25 @@ export default function PlayerProfilePage({
 						</h1>
 					)}
 					{player.displayName && (
-						<p className="text-sm text-muted-foreground">
-							Partiful: {player.name}
+						<p className="text-sm text-muted-foreground flex items-center gap-2">
+							<span>Partiful: {player.name}</span>
+							<button
+								onClick={async () => {
+									await fetch(`/api/players/${params.id}`, {
+										method: "PATCH",
+										headers: { "Content-Type": "application/json" },
+										body: JSON.stringify({ displayName: null }),
+									});
+									setPlayer((prev) =>
+										prev ? { ...prev, displayName: null } : prev,
+									);
+									setNameVal("");
+								}}
+								className="text-xs text-muted-foreground/60 hover:text-destructive transition-colors"
+								title="Remove alias"
+							>
+								✕
+							</button>
 						</p>
 					)}
 				</div>
