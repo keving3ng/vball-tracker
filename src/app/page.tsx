@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,21 @@ export default function Dashboard() {
 	const [outstandingOpen, setOutstandingOpen] = useState(false);
 	const [showDotMenu, setShowDotMenu] = useState(false);
 	const [pastPagesShown, setPastPagesShown] = useState(1);
+	const dotMenuRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!showDotMenu) return;
+		function handleClickOutside(e: MouseEvent) {
+			if (
+				dotMenuRef.current &&
+				!dotMenuRef.current.contains(e.target as Node)
+			) {
+				setShowDotMenu(false);
+			}
+		}
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
+	}, [showDotMenu]);
 
 	useEffect(() => {
 		Promise.all([fetch("/api/runs"), fetch("/api/players")])
@@ -154,7 +169,7 @@ export default function Dashboard() {
 			<div>
 				<div className="flex items-center justify-between mb-4">
 					<h1 className="text-2xl font-bold">Upcoming Runs</h1>
-					<div className="relative flex items-center gap-1">
+					<div className="relative flex items-center gap-1" ref={dotMenuRef}>
 						<Button
 							variant="outline"
 							size="sm"
