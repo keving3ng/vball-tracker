@@ -262,16 +262,36 @@ export default function PlayerProfilePage({
 				</div>
 			</div>
 
-			{(player.currentStreak > 1 || player.bestStreak > 1) && (
-				<div className="flex gap-4 text-sm text-muted-foreground">
-					{player.currentStreak > 1 && (
-						<span>🔥 {player.currentStreak} run streak</span>
-					)}
-					{player.bestStreak > player.currentStreak && (
-						<span>Best: {player.bestStreak}</span>
-					)}
-				</div>
-			)}
+			{(() => {
+				const now = new Date().toISOString();
+				const pastRuns = player.runs.filter(
+					(r) => r.startDate == null || r.startDate <= now,
+				);
+				const totalPaid = pastRuns.reduce(
+					(sum, r) => sum + (r.amountPaid ?? 0),
+					0,
+				);
+				const stats: { label: string; value: string }[] = [
+					{ label: "runs", value: String(pastRuns.length) },
+					{ label: "paid out", value: `$${totalPaid.toFixed(0)}` },
+					...(player.currentStreak > 1
+						? [{ label: "streak", value: `🔥 ${player.currentStreak}` }]
+						: []),
+					...(player.bestStreak > 1
+						? [{ label: "best streak", value: String(player.bestStreak) }]
+						: []),
+				];
+				return (
+					<div className="flex flex-wrap gap-x-6 gap-y-2">
+						{stats.map((s) => (
+							<div key={s.label} className="flex flex-col items-center">
+								<span className="text-base font-semibold">{s.value}</span>
+								<span className="text-xs text-muted-foreground">{s.label}</span>
+							</div>
+						))}
+					</div>
+				);
+			})()}
 
 			<div className="space-y-1">
 				<p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
