@@ -47,8 +47,7 @@ interface Preset {
 interface AuditLogEntry {
 	id: number;
 	userId: string;
-	action: string;
-	amount: number | null;
+	action: "marked_paid" | "marked_unpaid";
 	amountPaid: number | null;
 	changedAt: string;
 	playerName: string;
@@ -73,12 +72,22 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const [auditLogLoaded, setAuditLogLoaded] = useState(false);
 	const [auditLogOpen, setAuditLogOpen] = useState(false);
 
-	const loadAuditLog = useCallback(async () => {
-		if (auditLogLoaded) return;
-		const res = await fetch(`/api/runs/${params.id}/audit-log`);
-		if (res.ok) setAuditLog(await res.json());
-		setAuditLogLoaded(true);
-	}, [params.id, auditLogLoaded]);
+	const loadAuditLog = useCallback(
+		async (force = false) => {
+			if (auditLogLoaded && !force) return;
+			try {
+				const res = await fetch(`/api/runs/${params.id}/audit-log`);
+				if (res.ok) {
+					setAuditLog(await res.json());
+				}
+			} catch {
+				// silently leave existing entries, log will refresh on next open
+			} finally {
+				setAuditLogLoaded(true);
+			}
+		},
+		[params.id, auditLogLoaded],
+	);
 
 	const sync = useCallback(async () => {
 		setSyncing(true);
@@ -132,6 +141,10 @@ export default function RunPage({ params }: { params: { id: string } }) {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ userId, amount: amountOwed, amountPaid }),
 		});
+		setAuditLogLoaded(false);
+		if (auditLogOpen) {
+			loadAuditLog(true);
+		}
 		setRun((prev) =>
 			prev
 				? {
