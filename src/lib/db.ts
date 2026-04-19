@@ -87,6 +87,7 @@ export interface Player {
 export interface Run {
 	eventId: string;
 	title: string;
+	displayTitle: string | null;
 	startDate: string | null;
 	capacity: number | null;
 	totalCost: number | null;
