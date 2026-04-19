@@ -349,6 +349,14 @@ export const queries = {
 		`SELECT COUNT(*) as count FROM attendance WHERE plus_one_of = ? AND eventId = ?`,
 	),
 
+	getGoingCount: db.prepare(
+		`SELECT COUNT(*) as count FROM attendance WHERE eventId = ? AND rsvpStatus = 'GOING'`,
+	),
+
+	updateSplitCount: db.prepare(
+		`UPDATE runs SET splitCount = ? WHERE eventId = ?`,
+	),
+
 	deleteAnonPlusOnePlayer: db.prepare(
 		`DELETE FROM players WHERE userId = ? AND is_anon_plus_one = 1`,
 	),

@@ -24,17 +24,25 @@ export async function POST(
 		plusOneOf: hostUserId,
 	});
 
+	const goingRow = queries.getGoingCount.get(params.id) as { count: number };
+	queries.updateSplitCount.run(goingRow.count, params.id);
+
 	const run = queries.getRunBasic.get(params.id) as {
 		totalCost: number | null;
 		splitCount: number | null;
 	} | null;
 	if (run?.totalCost != null) {
-		const amount = run.totalCost / (run.splitCount ?? 12);
-		queries.upsertPaymentOwed.run({
-			eventId: params.id,
-			userId: plusOneUserId,
-			amount,
-		});
+		const amount = run.totalCost / goingRow.count;
+		const going = queries.getGoingAttendance.all(params.id) as {
+			userId: string;
+		}[];
+		for (const a of going) {
+			queries.upsertPaymentOwed.run({
+				eventId: params.id,
+				userId: a.userId,
+				amount,
+			});
+		}
 	}
 
 	return NextResponse.json({ plusOneUserId });
@@ -54,5 +62,27 @@ export async function DELETE(
 	}
 
 	removeSinglePlusOne(params.id, plusOneUserId);
+
+	const goingRow = queries.getGoingCount.get(params.id) as { count: number };
+	queries.updateSplitCount.run(goingRow.count, params.id);
+
+	const run = queries.getRunBasic.get(params.id) as {
+		totalCost: number | null;
+		splitCount: number | null;
+	} | null;
+	if (run?.totalCost != null && goingRow.count > 0) {
+		const amount = run.totalCost / goingRow.count;
+		const going = queries.getGoingAttendance.all(params.id) as {
+			userId: string;
+		}[];
+		for (const a of going) {
+			queries.upsertPaymentOwed.run({
+				eventId: params.id,
+				userId: a.userId,
+				amount,
+			});
+		}
+	}
+
 	return NextResponse.json({ removed: true });
 }
