@@ -47,6 +47,16 @@ db.exec(`
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS payment_audit_log (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    eventId   TEXT NOT NULL,
+    userId    TEXT NOT NULL,
+    action    TEXT NOT NULL,
+    amount    REAL,
+    amountPaid REAL,
+    changedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Additive schema migrations — safe to run on every startup
@@ -99,6 +109,16 @@ export interface PaymentRow {
 	paid: boolean;
 	method: string | null;
 	note: string | null;
+}
+export interface PaymentAuditLogRow {
+	id: number;
+	eventId: string;
+	userId: string;
+	action: string;
+	amount: number | null;
+	amountPaid: number | null;
+	changedAt: string;
+	playerName: string;
 }
 
 export const queries = {
@@ -334,6 +354,21 @@ export const queries = {
     SELECT userId, COALESCE(SUM(COALESCE(amountPaid, 0) - COALESCE(amount, 0)), 0) AS balance
     FROM payments WHERE eventId != ?
     GROUP BY userId
+  `),
+
+	insertPaymentAuditLog: db.prepare(`
+    INSERT INTO payment_audit_log (eventId, userId, action, amount, amountPaid)
+    VALUES (@eventId, @userId, @action, @amount, @amountPaid)
+  `),
+
+	getPaymentAuditLog: db.prepare(`
+    SELECT l.id, l.eventId, l.userId, l.action, l.amount, l.amountPaid, l.changedAt,
+           COALESCE(p.displayName, p.name) AS playerName
+    FROM payment_audit_log l
+    LEFT JOIN players p ON p.userId = l.userId
+    WHERE l.eventId = ?
+    ORDER BY l.changedAt DESC
+    LIMIT 100
   `),
 };
 
