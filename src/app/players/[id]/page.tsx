@@ -456,6 +456,9 @@ function RunHistoryRow({
 	const [editingAmount, setEditingAmount] = useState(false);
 	const [customAmount, setCustomAmount] = useState("");
 
+	const isFuture =
+		run.startDate != null && run.startDate > new Date().toISOString();
+
 	const date = run.startDate
 		? new Date(run.startDate).toLocaleDateString("en-CA", {
 				month: "short",
@@ -472,7 +475,9 @@ function RunHistoryRow({
 			: "paid";
 
 	return (
-		<tr className={striped ? "bg-muted/30" : "bg-background"}>
+		<tr
+			className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""}`}
+		>
 			<td className="px-4 py-2">
 				<Link
 					href={`/runs/${run.eventId}`}
@@ -575,6 +580,9 @@ function MobileRunCard({
 	const [editingAmount, setEditingAmount] = useState(false);
 	const [customAmount, setCustomAmount] = useState("");
 
+	const isFuture =
+		run.startDate != null && run.startDate > new Date().toISOString();
+
 	const date = run.startDate
 		? new Date(run.startDate).toLocaleDateString("en-CA", {
 				month: "short",
@@ -591,7 +599,9 @@ function MobileRunCard({
 			: "paid";
 
 	return (
-		<div className="rounded-lg border px-4 py-3 space-y-2">
+		<div
+			className={`rounded-lg border px-4 py-3 space-y-2 ${isFuture ? "opacity-50" : ""}`}
+		>
 			<div className="flex items-start justify-between gap-2">
 				<div className="min-w-0">
 					<Link
