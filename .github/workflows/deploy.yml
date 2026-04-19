@@ -89,24 +89,31 @@ jobs:
                --env-file /mnt/user/appdata/vball-tracker/.env \
                ${TAILSCALE_IP}:5000/vball-tracker:latest"
 
-      - name: Notify Discord (success)
-        if: success()
+      - name: Install @keg/discord
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          SHA: ${{ github.sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TAILSCALE_IP: ${{ secrets.TAILSCALE_IP }}
         run: |
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ **vball-tracker deploy succeeded** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
+          mkdir -p /tmp/keg-discord
+          echo '{"type":"module"}' > /tmp/keg-discord/package.json
+          printf '@keg:registry=http://%s:4873\n//%s:4873/:_authToken=verdaccio-anonymous\n' \
+            "$TAILSCALE_IP" "$TAILSCALE_IP" > /tmp/keg-discord/.npmrc
+          cd /tmp/keg-discord && npm install @keg/discord --silent
 
-      - name: Notify Discord (failure)
-        if: failure()
+      - name: Notify Discord
+        if: always()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SHA: ${{ github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SERVICE: vball-tracker
+          JOB_STATUS: ${{ job.status }}
         run: |
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ **vball-tracker deploy failed** — \`${SHA:0:7}\`\n${RUN_URL}\"}"
+          cat > /tmp/notify.mjs << 'EOF'
+          import { sendWebhook, deploySuccess, deployFailure } from '/tmp/keg-discord/node_modules/@keg/discord/dist/index.js';
+          const { DISCORD_WEBHOOK_URL, SHA, RUN_URL, SERVICE, JOB_STATUS } = process.env;
+          const payload = JOB_STATUS === 'success'
+            ? deploySuccess({ service: SERVICE, sha: SHA, runUrl: RUN_URL })
+            : deployFailure({ service: SERVICE, sha: SHA, runUrl: RUN_URL });
+          await sendWebhook(DISCORD_WEBHOOK_URL, payload);
+          EOF
+          node /tmp/notify.mjs
