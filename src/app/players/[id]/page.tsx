@@ -151,10 +151,9 @@ export default function PlayerProfilePage({
 
 	const copyReminder = async () => {
 		if (!player) return;
-		const name = player.displayName ?? player.name;
 		const owed = Math.abs(player.balance).toFixed(2);
 		const runCount = player.runs.filter((r) => !r.paid).length;
-		const msg = `Hey ${name}, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}. Venmo/e-transfer whenever!`;
+		const msg = `Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}. Please etransfer me at kevingeng33@gmail.com when you get the chance!`;
 		await navigator.clipboard.writeText(msg);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
