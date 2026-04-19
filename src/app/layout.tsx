@@ -35,6 +35,12 @@ export default function RootLayout({
 					>
 						Players
 					</Link>
+					<Link
+						href="/audit-log"
+						className="text-sm text-muted-foreground hover:text-foreground"
+					>
+						Audit Log
+					</Link>
 					<span className="ml-auto text-xs text-muted-foreground">
 						v{version}
 					</span>
