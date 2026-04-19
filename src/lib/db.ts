@@ -345,6 +345,14 @@ export const queries = {
 	deletePlayer: db.prepare(`DELETE FROM players WHERE userId = ?`),
 
 	// Plus-one helpers
+	countPlusOnesForHost: db.prepare(
+		`SELECT COUNT(*) as count FROM attendance WHERE plus_one_of = ? AND eventId = ?`,
+	),
+
+	deleteAnonPlusOnePlayer: db.prepare(
+		`DELETE FROM players WHERE userId = ? AND is_anon_plus_one = 1`,
+	),
+
 	upsertAnonPlusOnePlayer: db.prepare(`
     INSERT INTO players (userId, name, is_anon_plus_one, updatedAt)
     VALUES (@userId, '+1', 1, datetime('now'))
@@ -487,6 +495,16 @@ export const upsertPaymentWithAudit = db.transaction(
 			amount: p.amount,
 			amountPaid: p.amountPaid,
 		});
+	},
+);
+
+// Removes a single anonymous +1 by their userId.
+// Cleans up payment, attendance, and player records atomically.
+export const removeSinglePlusOne = db.transaction(
+	(eventId: string, plusOneUserId: string) => {
+		queries.deletePaymentRow.run(plusOneUserId, eventId);
+		queries.deleteAttendanceRow.run(plusOneUserId, eventId);
+		queries.deleteAnonPlusOnePlayer.run(plusOneUserId);
 	},
 );
 

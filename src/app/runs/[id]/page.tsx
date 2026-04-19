@@ -271,6 +271,26 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		setPresets(newPresets);
 	};
 
+	const addPlusOne = async (hostUserId: string) => {
+		await fetch(`/api/runs/${params.id}/plus-one`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ hostUserId }),
+		});
+		const res = await fetch(`/api/runs/${params.id}`);
+		if (res.ok) setRun(await res.json());
+	};
+
+	const removePlusOne = async (plusOneUserId: string) => {
+		await fetch(`/api/runs/${params.id}/plus-one`, {
+			method: "DELETE",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ plusOneUserId }),
+		});
+		const res = await fetch(`/api/runs/${params.id}`);
+		if (res.ok) setRun(await res.json());
+	};
+
 	const openAddGuest = async () => {
 		setShowAddGuest(true);
 		if (allPlayers.length === 0) {
@@ -462,6 +482,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 												costPerHead={costPerHead}
 												onRecord={recordPayment}
 												plusOneCount={plusOnes.length}
+												onAddPlusOne={addPlusOne}
 											/>
 											{plusOnes.map((p1) => (
 												<GuestRow
@@ -470,6 +491,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 													costPerHead={costPerHead}
 													onRecord={recordPayment}
 													isSubRow
+													onRemovePlusOne={removePlusOne}
 												/>
 											))}
 										</Fragment>
@@ -655,6 +677,8 @@ function GuestRow({
 	onRecord,
 	plusOneCount = 0,
 	isSubRow = false,
+	onAddPlusOne,
+	onRemovePlusOne,
 }: {
 	guest: Guest;
 	costPerHead: number;
@@ -665,6 +689,8 @@ function GuestRow({
 	) => void;
 	plusOneCount?: number;
 	isSubRow?: boolean;
+	onAddPlusOne?: (hostUserId: string) => void;
+	onRemovePlusOne?: (plusOneUserId: string) => void;
 }) {
 	const amountOwed = guest.payment?.amount ?? costPerHead;
 	const isPaid = guest.payment?.amountPaid != null;
@@ -701,6 +727,26 @@ function GuestRow({
 					<span className="text-xs text-muted-foreground bg-muted px-1 rounded">
 						manual
 					</span>
+				)}
+			</div>
+			<div className="ml-auto">
+				{isSubRow && onRemovePlusOne && (
+					<button
+						onClick={() => onRemovePlusOne(guest.userId)}
+						className="text-xs text-muted-foreground hover:text-destructive transition-colors px-1"
+						title="Remove this +1"
+					>
+						×
+					</button>
+				)}
+				{!isSubRow && onAddPlusOne && (
+					<button
+						onClick={() => onAddPlusOne(guest.userId)}
+						className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1"
+						title="Add +1"
+					>
+						+1
+					</button>
 				)}
 			</div>
 		</div>
