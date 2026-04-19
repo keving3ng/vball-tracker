@@ -101,6 +101,7 @@ jobs:
 
       - name: Notify Discord
         if: always()
+        continue-on-error: true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           SHA: ${{ github.sha }}
