@@ -110,11 +110,13 @@ export interface PaymentRow {
 	method: string | null;
 	note: string | null;
 }
+export type PaymentAuditAction = "marked_paid" | "marked_unpaid";
+
 export interface PaymentAuditLogRow {
 	id: number;
 	eventId: string;
 	userId: string;
-	action: string;
+	action: PaymentAuditAction;
 	amount: number | null;
 	amountPaid: number | null;
 	changedAt: string;
@@ -423,7 +425,7 @@ export interface UpsertPaymentWithAuditParams {
 	paid: number;
 	method: string | null;
 	note: string | null;
-	action: string;
+	action: PaymentAuditAction;
 }
 
 export const upsertPaymentWithAudit = db.transaction(

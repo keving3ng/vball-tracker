@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { PaymentAuditAction } from "@/lib/db";
 
 interface Payment {
 	amount: number;
@@ -47,7 +48,7 @@ interface Preset {
 interface AuditLogEntry {
 	id: number;
 	userId: string;
-	action: "marked_paid" | "marked_unpaid";
+	action: PaymentAuditAction;
 	amountPaid: number | null;
 	changedAt: string;
 	playerName: string;
