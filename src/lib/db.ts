@@ -70,6 +70,7 @@ for (const sql of [
 	`ALTER TABLE runs ADD COLUMN hostUserId TEXT`,
 	`ALTER TABLE attendance ADD COLUMN plus_one_of TEXT`,
 	`ALTER TABLE players ADD COLUMN is_anon_plus_one INTEGER DEFAULT 0`,
+	`ALTER TABLE runs ADD COLUMN displayTitle TEXT`, // NEW
 ]) {
 	try {
 		db.exec(sql);
@@ -121,6 +122,10 @@ export interface PaymentAuditLogRow {
 	amountPaid: number | null;
 	changedAt: string;
 	playerName: string;
+}
+
+export interface GlobalPaymentAuditLogRow extends PaymentAuditLogRow {
+	eventTitle: string;
 }
 
 export const queries = {
@@ -188,6 +193,23 @@ export const queries = {
     UPDATE runs SET hostUserId = @hostUserId WHERE eventId = @eventId
   `),
 
+	updateRunDisplayTitle: db.prepare(`
+    UPDATE runs SET displayTitle = @displayTitle WHERE eventId = @eventId
+  `),
+
+	getRunDisplayTitles: db.prepare(`
+    SELECT eventId, displayTitle FROM runs
+  `),
+
+	getPaymentSummaries: db.prepare(`
+    SELECT
+      eventId,
+      COUNT(CASE WHEN amountPaid IS NOT NULL THEN 1 END) as paidCount,
+      COUNT(*) as totalCount
+    FROM payments
+    GROUP BY eventId
+  `),
+
 	getLastRunHost: db.prepare(`
     SELECT hostUserId FROM runs WHERE hostUserId IS NOT NULL ORDER BY startDate DESC LIMIT 1
   `),
@@ -235,8 +257,10 @@ export const queries = {
       COALESCE(SUM(CASE WHEN pay.amountPaid IS NOT NULL THEN 1 ELSE 0 END), 0) as paidRuns,
       COALESCE(SUM(CASE WHEN pay.amountPaid IS NULL AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0 THEN 1 ELSE 0 END), 0) as owingRuns,
       COALESCE(SUM(
-        COALESCE(pay.amountPaid, 0) -
-        COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END)
+        CASE WHEN r.startDate IS NULL OR r.startDate <= datetime('now') THEN
+          COALESCE(pay.amountPaid, 0) -
+          COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END)
+        ELSE 0 END
       ), 0) as balance
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
@@ -371,6 +395,18 @@ export const queries = {
     WHERE l.eventId = ?
     ORDER BY l.changedAt DESC
     LIMIT 100
+  `),
+
+	getGlobalPaymentAuditLog: db.prepare(`
+    SELECT
+      l.id, l.eventId, l.userId, l.action, l.amount, l.amountPaid, l.changedAt,
+      COALESCE(p.displayName, p.name) AS playerName,
+      COALESCE(r.displayTitle, r.title) AS eventTitle
+    FROM payment_audit_log l
+    LEFT JOIN players p ON p.userId = l.userId
+    LEFT JOIN runs r ON r.eventId = l.eventId
+    ORDER BY l.changedAt DESC
+    LIMIT 500
   `),
 };
 
