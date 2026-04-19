@@ -199,7 +199,11 @@ export const queries = {
   `),
 
 	getRunDisplayTitles: db.prepare(`
-    SELECT eventId, displayTitle FROM runs
+    SELECT r.eventId, r.displayTitle, r.syncedAt,
+      COUNT(CASE WHEN a.rsvpStatus = 'GOING' THEN 1 END) as goingCount
+    FROM runs r
+    LEFT JOIN attendance a ON a.eventId = r.eventId
+    GROUP BY r.eventId
   `),
 
 	getPaymentSummaries: db.prepare(`

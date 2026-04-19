@@ -12,6 +12,8 @@ interface PartifulEvent {
 	displayTitle: string | null;
 	startDate: string | null;
 	status: string;
+	syncedAt: string | null;
+	goingCount: number;
 	paidCount: number;
 	totalCount: number;
 }
@@ -39,6 +41,7 @@ export default function Dashboard() {
 	const [outstandingOpen, setOutstandingOpen] = useState(false);
 	const [showDotMenu, setShowDotMenu] = useState(false);
 	const [pastPagesShown, setPastPagesShown] = useState(1);
+	const [syncing, setSyncing] = useState<string | null>(null);
 	const dotMenuRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -55,19 +58,36 @@ export default function Dashboard() {
 		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, [showDotMenu]);
 
+	async function loadData() {
+		const [runsRes, playersRes] = await Promise.all([
+			fetch("/api/runs"),
+			fetch("/api/players"),
+		]);
+		if (!runsRes.ok) throw new Error(`Failed to load runs: ${runsRes.status}`);
+		const d = await runsRes.json();
+		setUpcoming(d.upcoming);
+		setPast(d.past);
+		if (playersRes.ok) setPlayers(await playersRes.json());
+	}
+
 	useEffect(() => {
-		Promise.all([fetch("/api/runs"), fetch("/api/players")])
-			.then(async ([runsRes, playersRes]) => {
-				if (!runsRes.ok)
-					throw new Error(`Failed to load runs: ${runsRes.status}`);
-				const d = await runsRes.json();
-				setUpcoming(d.upcoming);
-				setPast(d.past);
-				if (playersRes.ok) setPlayers(await playersRes.json());
-			})
-			.catch((e) => setError(e.message))
+		loadData()
+			.catch((e) => setError(e instanceof Error ? e.message : "Unknown error"))
 			.finally(() => setLoading(false));
 	}, []);
+
+	async function handleSync(eventId: string) {
+		setSyncing(eventId);
+		try {
+			const res = await fetch(`/api/runs/${eventId}/sync`, { method: "POST" });
+			if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+			await loadData();
+		} catch (e) {
+			setError(e instanceof Error ? e.message : "Sync failed");
+		} finally {
+			setSyncing(null);
+		}
+	}
 
 	async function createRun() {
 		if (!newTitle.trim()) return;
@@ -246,7 +266,11 @@ export default function Dashboard() {
 
 				{nextRun && (
 					<div className="mb-3">
-						<PrimaryUpcomingCard event={nextRun} />
+						<PrimaryUpcomingCard
+							event={nextRun}
+							onSync={handleSync}
+							syncing={syncing === nextRun.id}
+						/>
 					</div>
 				)}
 
@@ -285,7 +309,15 @@ export default function Dashboard() {
 	);
 }
 
-function PrimaryUpcomingCard({ event }: { event: PartifulEvent }) {
+function PrimaryUpcomingCard({
+	event,
+	onSync,
+	syncing,
+}: {
+	event: PartifulEvent;
+	onSync: (eventId: string) => void;
+	syncing: boolean;
+}) {
 	const date = event.startDate
 		? new Date(event.startDate).toLocaleDateString("en-CA", {
 				weekday: "short",
@@ -297,6 +329,15 @@ function PrimaryUpcomingCard({ event }: { event: PartifulEvent }) {
 			})
 		: "TBD";
 	const displayTitle = event.displayTitle ?? event.title;
+	const syncedLabel = event.syncedAt
+		? new Date(event.syncedAt).toLocaleString("en-CA", {
+				month: "short",
+				day: "numeric",
+				hour: "numeric",
+				minute: "2-digit",
+				timeZone: "America/Toronto",
+			})
+		: null;
 
 	return (
 		<Link href={`/runs/${event.id}`} className="block">
@@ -309,11 +350,33 @@ function PrimaryUpcomingCard({ event }: { event: PartifulEvent }) {
 							</CardTitle>
 							<p className="text-sm text-muted-foreground mt-0.5">{date}</p>
 						</div>
-						{event.totalCount > 0 && (
-							<span className="text-sm text-muted-foreground shrink-0">
-								{event.paidCount}/{event.totalCount} paid
-							</span>
-						)}
+						<div className="flex flex-col items-end gap-0.5 shrink-0 text-sm text-muted-foreground">
+							{event.goingCount > 0 && (
+								<span>{event.goingCount} attending</span>
+							)}
+							{event.totalCount > 0 && (
+								<span>
+									{event.paidCount}/{event.totalCount} paid
+								</span>
+							)}
+						</div>
+					</div>
+					<div className="flex items-center justify-end mt-2 pt-2 border-t border-border/50">
+						<button
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								onSync(event.id);
+							}}
+							disabled={syncing}
+							className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+						>
+							{syncing
+								? "Syncing…"
+								: syncedLabel
+									? `Synced ${syncedLabel} · Sync now`
+									: "Sync from Partiful"}
+						</button>
 					</div>
 				</CardHeader>
 			</Card>

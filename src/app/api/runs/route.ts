@@ -19,6 +19,8 @@ interface PartifulEventRaw {
 
 interface EnrichedEvent extends PartifulEventRaw {
 	displayTitle: string | null;
+	syncedAt: string | null;
+	goingCount: number;
 	paidCount: number;
 	totalCount: number;
 }
@@ -49,13 +51,13 @@ export async function GET() {
 	const pastManual = manualRuns.filter((r) => r.startDate && r.startDate < now);
 
 	// Build enrichment maps from local DB
-	const displayTitleRows = queries.getRunDisplayTitles.all() as {
+	const runMetaRows = queries.getRunDisplayTitles.all() as {
 		eventId: string;
 		displayTitle: string | null;
+		syncedAt: string | null;
+		goingCount: number;
 	}[];
-	const displayTitleMap = new Map(
-		displayTitleRows.map((r) => [r.eventId, r.displayTitle]),
-	);
+	const runMetaMap = new Map(runMetaRows.map((r) => [r.eventId, r]));
 
 	const paymentSummaryRows = queries.getPaymentSummaries.all() as {
 		eventId: string;
@@ -66,7 +68,9 @@ export async function GET() {
 
 	const enrich = (event: PartifulEventRaw): EnrichedEvent => ({
 		...event,
-		displayTitle: displayTitleMap.get(event.id) ?? null,
+		displayTitle: runMetaMap.get(event.id)?.displayTitle ?? null,
+		syncedAt: runMetaMap.get(event.id)?.syncedAt ?? null,
+		goingCount: runMetaMap.get(event.id)?.goingCount ?? 0,
 		paidCount: paymentMap.get(event.id)?.paidCount ?? 0,
 		totalCount: paymentMap.get(event.id)?.totalCount ?? 0,
 	});
@@ -101,6 +105,8 @@ export async function POST(request: Request): Promise<NextResponse> {
 		id: eventId,
 		title: title.trim(),
 		displayTitle: null,
+		syncedAt: null,
+		goingCount: 0,
 		startDate: startDate ?? null,
 		status: "manual",
 		paidCount: 0,
