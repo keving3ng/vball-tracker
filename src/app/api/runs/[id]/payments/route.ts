@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { queries } from "@/lib/db";
+import { upsertPaymentWithAudit } from "@/lib/db";
 
 export async function POST(
 	req: Request,
@@ -11,7 +11,9 @@ export async function POST(
 	const resolvedAmountPaid: number | null =
 		amountPaid !== undefined ? amountPaid : null;
 
-	queries.upsertPayment.run({
+	const action = resolvedAmountPaid != null ? "marked_paid" : "marked_unpaid";
+
+	upsertPaymentWithAudit({
 		eventId: params.id,
 		userId,
 		amount: amount ?? 0,
@@ -19,15 +21,7 @@ export async function POST(
 		paid: resolvedAmountPaid != null ? 1 : 0,
 		method: method ?? null,
 		note: note ?? null,
-	});
-
-	const action = resolvedAmountPaid != null ? "marked_paid" : "marked_unpaid";
-	queries.insertPaymentAuditLog.run({
-		eventId: params.id,
-		userId,
 		action,
-		amount: amount ?? null,
-		amountPaid: resolvedAmountPaid,
 	});
 
 	return NextResponse.json({ ok: true });

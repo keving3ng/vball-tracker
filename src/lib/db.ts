@@ -413,4 +413,38 @@ export const purgePlusOnesForHost = db.transaction(
 	},
 );
 
+// Payment upsert + audit log in a single transaction.
+// Ensures both operations succeed or both roll back if one fails.
+export interface UpsertPaymentWithAuditParams {
+	eventId: string;
+	userId: string;
+	amount: number;
+	amountPaid: number | null;
+	paid: number;
+	method: string | null;
+	note: string | null;
+	action: string;
+}
+
+export const upsertPaymentWithAudit = db.transaction(
+	(p: UpsertPaymentWithAuditParams) => {
+		queries.upsertPayment.run({
+			eventId: p.eventId,
+			userId: p.userId,
+			amount: p.amount,
+			amountPaid: p.amountPaid,
+			paid: p.paid,
+			method: p.method,
+			note: p.note,
+		});
+		queries.insertPaymentAuditLog.run({
+			eventId: p.eventId,
+			userId: p.userId,
+			action: p.action,
+			amount: p.amount,
+			amountPaid: p.amountPaid,
+		});
+	},
+);
+
 export default db;
