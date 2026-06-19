@@ -12,6 +12,13 @@ interface PlayerBasic {
 	displayName: string | null;
 }
 
+interface PlusOneEntry {
+	userId: string;
+	amountOwed: number;
+	amountPaid: number | null;
+	paid: boolean;
+}
+
 interface RunEntry {
 	eventId: string;
 	title: string;
@@ -19,6 +26,7 @@ interface RunEntry {
 	amountOwed: number;
 	amountPaid: number | null;
 	paid: boolean;
+	plusOnes: PlusOneEntry[];
 }
 
 interface PlayerProfile {
@@ -103,29 +111,40 @@ export default function PlayerProfilePage({
 
 	const recordPayment = async (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => {
 		await fetch(`/api/runs/${eventId}/payments`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				userId: params.id,
-				amount: amountOwed,
-				amountPaid,
-			}),
+			body: JSON.stringify({ userId, amount: amountOwed, amountPaid }),
 		});
 		setPlayer((prev) => {
 			if (!prev) return prev;
-			const updatedRuns = prev.runs.map((r) =>
-				r.eventId === eventId
-					? { ...r, amountPaid, paid: amountPaid != null }
-					: r,
-			);
-			const newBalance = updatedRuns.reduce(
-				(sum, r) => sum + (r.amountPaid ?? 0) - r.amountOwed,
-				0,
-			);
+			const updatedRuns = prev.runs.map((r) => {
+				if (r.eventId !== eventId) return r;
+				if (userId === params.id) {
+					return { ...r, amountPaid, paid: amountPaid != null };
+				}
+				// +1 payment
+				return {
+					...r,
+					plusOnes: r.plusOnes.map((p1) =>
+						p1.userId === userId
+							? { ...p1, amountPaid, paid: amountPaid != null }
+							: p1,
+					),
+				};
+			});
+			const newBalance = updatedRuns.reduce((sum, r) => {
+				const own = (r.amountPaid ?? 0) - r.amountOwed;
+				const p1s = r.plusOnes.reduce(
+					(s, p1) => s + (p1.amountPaid ?? 0) - p1.amountOwed,
+					0,
+				);
+				return sum + own + p1s;
+			}, 0);
 			return { ...prev, balance: newBalance, runs: updatedRuns };
 		});
 	};
@@ -469,6 +488,7 @@ export default function PlayerProfilePage({
 								<MobileRunCard
 									key={run.eventId}
 									run={run}
+									playerId={params.id}
 									onRecord={recordPayment}
 								/>
 							))}
@@ -493,6 +513,7 @@ export default function PlayerProfilePage({
 										<RunHistoryRow
 											key={run.eventId}
 											run={run}
+											playerId={params.id}
 											striped={i % 2 !== 0}
 											onRecord={recordPayment}
 										/>
@@ -509,13 +530,16 @@ export default function PlayerProfilePage({
 
 function RunHistoryRow({
 	run,
+	playerId,
 	striped,
 	onRecord,
 }: {
 	run: RunEntry;
+	playerId: string;
 	striped: boolean;
 	onRecord: (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
@@ -535,53 +559,99 @@ function RunHistoryRow({
 	const status = !run.paid ? "unpaid" : "paid";
 
 	return (
-		<tr
-			className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""}`}
-		>
-			<td className="px-4 py-2">
-				<Link
-					href={`/runs/${run.eventId}`}
-					className="font-medium hover:underline"
+		<>
+			<tr
+				className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""}`}
+			>
+				<td className="px-4 py-2">
+					<Link
+						href={`/runs/${run.eventId}`}
+						className="font-medium hover:underline"
+					>
+						{run.title}
+					</Link>
+					<p className="text-xs text-muted-foreground">{date}</p>
+				</td>
+				<td className="px-4 py-2 text-center">${run.amountOwed.toFixed(2)}</td>
+				<td className="px-4 py-2 text-center">
+					{run.amountPaid != null ? `$${run.amountPaid.toFixed(2)}` : "—"}
+				</td>
+				<td className="px-4 py-2 text-center">
+					<Badge variant={status === "paid" ? "default" : "outline"}>
+						{status}
+					</Badge>
+				</td>
+				<td className="px-4 py-2 text-right">
+					<Button
+						size="sm"
+						variant={run.paid ? "default" : "outline"}
+						onClick={() =>
+							onRecord(
+								run.eventId,
+								playerId,
+								run.amountOwed,
+								run.paid ? null : run.amountOwed,
+							)
+						}
+					>
+						{run.paid ? "✓ Paid" : "Mark Paid"}
+					</Button>
+				</td>
+			</tr>
+			{run.plusOnes.map((p1) => (
+				<tr
+					key={p1.userId}
+					className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""} opacity-80`}
 				>
-					{run.title}
-				</Link>
-				<p className="text-xs text-muted-foreground">{date}</p>
-			</td>
-			<td className="px-4 py-2 text-center">${run.amountOwed.toFixed(2)}</td>
-			<td className="px-4 py-2 text-center">
-				{run.amountPaid != null ? `$${run.amountPaid.toFixed(2)}` : "—"}
-			</td>
-			<td className="px-4 py-2 text-center">
-				<Badge variant={status === "paid" ? "default" : "outline"}>
-					{status}
-				</Badge>
-			</td>
-			<td className="px-4 py-2 text-right">
-				<Button
-					size="sm"
-					variant={run.paid ? "default" : "outline"}
-					onClick={() =>
-						onRecord(
-							run.eventId,
-							run.amountOwed,
-							run.paid ? null : run.amountOwed,
-						)
-					}
-				>
-					{run.paid ? "✓ Paid" : "Mark Paid"}
-				</Button>
-			</td>
-		</tr>
+					<td className="pl-8 pr-4 py-1.5">
+						<span className="text-xs text-muted-foreground">+1</span>
+					</td>
+					<td className="px-4 py-1.5 text-center text-xs">
+						${p1.amountOwed.toFixed(2)}
+					</td>
+					<td className="px-4 py-1.5 text-center text-xs">
+						{p1.amountPaid != null ? `$${p1.amountPaid.toFixed(2)}` : "—"}
+					</td>
+					<td className="px-4 py-1.5 text-center">
+						<Badge
+							variant={p1.paid ? "default" : "outline"}
+							className="text-xs"
+						>
+							{p1.paid ? "paid" : "unpaid"}
+						</Badge>
+					</td>
+					<td className="px-4 py-1.5 text-right">
+						<Button
+							size="sm"
+							variant={p1.paid ? "default" : "outline"}
+							onClick={() =>
+								onRecord(
+									run.eventId,
+									p1.userId,
+									p1.amountOwed,
+									p1.paid ? null : p1.amountOwed,
+								)
+							}
+						>
+							{p1.paid ? "✓ Paid" : "Mark Paid"}
+						</Button>
+					</td>
+				</tr>
+			))}
+		</>
 	);
 }
 
 function MobileRunCard({
 	run,
+	playerId,
 	onRecord,
 }: {
 	run: RunEntry;
+	playerId: string;
 	onRecord: (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
@@ -630,6 +700,7 @@ function MobileRunCard({
 				onClick={() =>
 					onRecord(
 						run.eventId,
+						playerId,
 						run.amountOwed,
 						run.paid ? null : run.amountOwed,
 					)
@@ -637,6 +708,40 @@ function MobileRunCard({
 			>
 				{run.paid ? "✓ Paid" : "Mark Paid"}
 			</Button>
+			{run.plusOnes.length > 0 && (
+				<div className="border-t pt-2 mt-1 space-y-2">
+					{run.plusOnes.map((p1) => (
+						<div key={p1.userId} className="pl-3 border-l-2 border-muted space-y-1">
+							<div className="flex items-center justify-between gap-2">
+								<span className="text-xs text-muted-foreground">+1</span>
+								<Badge variant={p1.paid ? "default" : "outline"} className="text-xs">
+									{p1.paid ? "paid" : "unpaid"}
+								</Badge>
+							</div>
+							<div className="flex items-center gap-3 text-xs text-muted-foreground">
+								<span>Owed: ${p1.amountOwed.toFixed(2)}</span>
+								{p1.amountPaid != null && (
+									<span>Paid: ${p1.amountPaid.toFixed(2)}</span>
+								)}
+							</div>
+							<Button
+								size="sm"
+								variant={p1.paid ? "default" : "outline"}
+								onClick={() =>
+									onRecord(
+										run.eventId,
+										p1.userId,
+										p1.amountOwed,
+										p1.paid ? null : p1.amountOwed,
+									)
+								}
+							>
+								{p1.paid ? "✓ Paid" : "Mark Paid"}
+							</Button>
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }
