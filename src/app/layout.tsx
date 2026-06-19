@@ -41,6 +41,12 @@ export default function RootLayout({
 					>
 						Audit Log
 					</Link>
+					<Link
+						href="/reconcile"
+						className="text-sm text-muted-foreground hover:text-foreground"
+					>
+						Reconcile
+					</Link>
 					<span className="ml-auto text-xs text-muted-foreground">
 						v{version}
 					</span>

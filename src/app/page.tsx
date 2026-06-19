@@ -277,7 +277,12 @@ export default function Dashboard() {
 				{otherUpcoming.length > 0 && (
 					<div className="space-y-1.5">
 						{otherUpcoming.map((event) => (
-							<CompactUpcomingTile key={event.id} event={event} />
+							<CompactUpcomingTile
+								key={event.id}
+								event={event}
+								onSync={handleSync}
+								syncing={syncing === event.id}
+							/>
 						))}
 					</div>
 				)}
@@ -291,7 +296,12 @@ export default function Dashboard() {
 				)}
 				<div className="space-y-1.5">
 					{visiblePast.map((event) => (
-						<PastRunTile key={event.id} event={event} />
+						<PastRunTile
+							key={event.id}
+							event={event}
+							onSync={handleSync}
+							syncing={syncing === event.id}
+						/>
 					))}
 				</div>
 				{sortedPast.length > visiblePast.length && (
@@ -384,7 +394,15 @@ function PrimaryUpcomingCard({
 	);
 }
 
-function CompactUpcomingTile({ event }: { event: PartifulEvent }) {
+function CompactUpcomingTile({
+	event,
+	onSync,
+	syncing,
+}: {
+	event: PartifulEvent;
+	onSync: (eventId: string) => void;
+	syncing: boolean;
+}) {
 	const date = event.startDate
 		? new Date(event.startDate).toLocaleDateString("en-CA", {
 				weekday: "short",
@@ -401,14 +419,33 @@ function CompactUpcomingTile({ event }: { event: PartifulEvent }) {
 			className="flex items-center justify-between px-4 py-2 rounded-lg border hover:bg-muted/30 transition-colors"
 		>
 			<span className="text-sm font-medium">{date}</span>
-			<span className="text-xs text-muted-foreground truncate ml-3 max-w-[60%] text-right">
+			<span className="text-xs text-muted-foreground truncate ml-3 flex-1 text-right">
 				{displayTitle}
 			</span>
+			<button
+				onClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					onSync(event.id);
+				}}
+				disabled={syncing}
+				className="ml-3 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors shrink-0"
+			>
+				{syncing ? "Syncing…" : "Sync"}
+			</button>
 		</Link>
 	);
 }
 
-function PastRunTile({ event }: { event: PartifulEvent }) {
+function PastRunTile({
+	event,
+	onSync,
+	syncing,
+}: {
+	event: PartifulEvent;
+	onSync: (eventId: string) => void;
+	syncing: boolean;
+}) {
 	const date = event.startDate
 		? new Date(event.startDate).toLocaleDateString("en-CA", {
 				weekday: "short",
@@ -422,17 +459,28 @@ function PastRunTile({ event }: { event: PartifulEvent }) {
 	return (
 		<Link
 			href={`/runs/${event.id}`}
-			className="flex items-center justify-between px-4 py-2.5 rounded-lg border hover:bg-muted/30 transition-colors"
+			className="flex items-center justify-between px-4 py-2.5 rounded-lg border hover:bg-muted/30 transition-colors gap-3"
 		>
-			<div className="min-w-0">
+			<div className="min-w-0 flex-1">
 				<p className="text-sm font-medium truncate">{displayTitle}</p>
 				<p className="text-xs text-muted-foreground">{date}</p>
 			</div>
 			{event.totalCount > 0 && (
-				<span className="text-xs text-muted-foreground shrink-0 ml-3">
+				<span className="text-xs text-muted-foreground shrink-0">
 					{event.paidCount}/{event.totalCount} paid
 				</span>
 			)}
+			<button
+				onClick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					onSync(event.id);
+				}}
+				disabled={syncing}
+				className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors shrink-0"
+			>
+				{syncing ? "Syncing…" : "Sync"}
+			</button>
 		</Link>
 	);
 }

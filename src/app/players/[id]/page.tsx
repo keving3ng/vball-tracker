@@ -12,6 +12,13 @@ interface PlayerBasic {
 	displayName: string | null;
 }
 
+interface PlusOneEntry {
+	userId: string;
+	amountOwed: number;
+	amountPaid: number | null;
+	paid: boolean;
+}
+
 interface RunEntry {
 	eventId: string;
 	title: string;
@@ -19,6 +26,7 @@ interface RunEntry {
 	amountOwed: number;
 	amountPaid: number | null;
 	paid: boolean;
+	plusOnes: PlusOneEntry[];
 }
 
 interface PlayerProfile {
@@ -50,14 +58,25 @@ export default function PlayerProfilePage({
 	const [mergePlayers, setMergePlayers] = useState<PlayerBasic[]>([]);
 	const [mergeTarget, setMergeTarget] = useState<PlayerBasic | null>(null);
 	const [merging, setMerging] = useState(false);
+	const [prevPlayerId, setPrevPlayerId] = useState<string | null>(null);
+	const [nextPlayerId, setNextPlayerId] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
-		const res = await fetch(`/api/players/${params.id}`);
+		const [res, allRes] = await Promise.all([
+			fetch(`/api/players/${params.id}`),
+			fetch("/api/players"),
+		]);
 		if (res.ok) {
 			const data = await res.json();
 			setPlayer(data);
 			setNameVal(data.displayName ?? "");
 			setNotesVal(data.notes ?? "");
+		}
+		if (allRes.ok) {
+			const all = (await allRes.json()) as PlayerBasic[];
+			const idx = all.findIndex((p) => p.userId === params.id);
+			setPrevPlayerId(idx > 0 ? all[idx - 1].userId : null);
+			setNextPlayerId(idx >= 0 && idx < all.length - 1 ? all[idx + 1].userId : null);
 		}
 		setLoading(false);
 	}, [params.id]);
@@ -92,29 +111,40 @@ export default function PlayerProfilePage({
 
 	const recordPayment = async (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => {
 		await fetch(`/api/runs/${eventId}/payments`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				userId: params.id,
-				amount: amountOwed,
-				amountPaid,
-			}),
+			body: JSON.stringify({ userId, amount: amountOwed, amountPaid }),
 		});
 		setPlayer((prev) => {
 			if (!prev) return prev;
-			const updatedRuns = prev.runs.map((r) =>
-				r.eventId === eventId
-					? { ...r, amountPaid, paid: amountPaid != null }
-					: r,
-			);
-			const newBalance = updatedRuns.reduce(
-				(sum, r) => sum + (r.amountPaid ?? 0) - r.amountOwed,
-				0,
-			);
+			const updatedRuns = prev.runs.map((r) => {
+				if (r.eventId !== eventId) return r;
+				if (userId === params.id) {
+					return { ...r, amountPaid, paid: amountPaid != null };
+				}
+				// +1 payment
+				return {
+					...r,
+					plusOnes: r.plusOnes.map((p1) =>
+						p1.userId === userId
+							? { ...p1, amountPaid, paid: amountPaid != null }
+							: p1,
+					),
+				};
+			});
+			const newBalance = updatedRuns.reduce((sum, r) => {
+				const own = (r.amountPaid ?? 0) - r.amountOwed;
+				const p1s = r.plusOnes.reduce(
+					(s, p1) => s + (p1.amountPaid ?? 0) - p1.amountOwed,
+					0,
+				);
+				return sum + own + p1s;
+			}, 0);
 			return { ...prev, balance: newBalance, runs: updatedRuns };
 		});
 	};
@@ -152,8 +182,25 @@ export default function PlayerProfilePage({
 	const copyReminder = async () => {
 		if (!player) return;
 		const owed = Math.abs(player.balance).toFixed(2);
-		const runCount = player.runs.filter((r) => !r.paid).length;
-		const msg = `Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}. Please etransfer me at kevingeng33@gmail.com when you get the chance!`;
+		const unpaidRuns = player.runs.filter((r) => !r.paid && r.startDate != null && r.startDate <= new Date().toISOString());
+		const runCount = unpaidRuns.length;
+		const lines = unpaidRuns.map((r) => {
+			const date = r.startDate
+				? new Date(r.startDate).toLocaleDateString("en-CA", {
+						month: "short",
+						day: "numeric",
+						timeZone: "America/Toronto",
+					})
+				: "Unknown date";
+			return `• ${date} ($${r.amountOwed.toFixed(2)})`;
+		});
+		const msg = [
+			`Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}:`,
+			"",
+			...lines,
+			"",
+			`Let me know if any of these are incorrect and etransfer me at kevingeng33@gmail.com when you get the chance! Thanks :)`,
+		].join("\n");
 		await navigator.clipboard.writeText(msg);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
@@ -166,12 +213,31 @@ export default function PlayerProfilePage({
 
 	return (
 		<div className="space-y-6">
-			<Link
-				href="/players"
-				className="text-sm text-muted-foreground hover:text-foreground"
-			>
-				← Players
-			</Link>
+			<div className="flex items-center justify-between text-sm">
+				{prevPlayerId ? (
+					<Link
+						href={`/players/${prevPlayerId}`}
+						className="text-muted-foreground hover:text-foreground"
+					>
+						← Prev player
+					</Link>
+				) : (
+					<span />
+				)}
+				<Link href="/players" className="text-xs text-muted-foreground hover:text-foreground">
+					All players
+				</Link>
+				{nextPlayerId ? (
+					<Link
+						href={`/players/${nextPlayerId}`}
+						className="text-muted-foreground hover:text-foreground"
+					>
+						Next player →
+					</Link>
+				) : (
+					<span />
+				)}
+			</div>
 
 			<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 				<div className="space-y-1">
@@ -422,6 +488,7 @@ export default function PlayerProfilePage({
 								<MobileRunCard
 									key={run.eventId}
 									run={run}
+									playerId={params.id}
 									onRecord={recordPayment}
 								/>
 							))}
@@ -446,6 +513,7 @@ export default function PlayerProfilePage({
 										<RunHistoryRow
 											key={run.eventId}
 											run={run}
+											playerId={params.id}
 											striped={i % 2 !== 0}
 											onRecord={recordPayment}
 										/>
@@ -462,20 +530,20 @@ export default function PlayerProfilePage({
 
 function RunHistoryRow({
 	run,
+	playerId,
 	striped,
 	onRecord,
 }: {
 	run: RunEntry;
+	playerId: string;
 	striped: boolean;
 	onRecord: (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
 }) {
-	const [editingAmount, setEditingAmount] = useState(false);
-	const [customAmount, setCustomAmount] = useState("");
-
 	const isFuture =
 		run.startDate != null && run.startDate > new Date().toISOString();
 
@@ -488,118 +556,106 @@ function RunHistoryRow({
 			})
 		: "—";
 
-	const status = !run.paid
-		? "unpaid"
-		: run.amountPaid != null && run.amountPaid !== run.amountOwed
-			? "partial"
-			: "paid";
+	const status = !run.paid ? "unpaid" : "paid";
 
 	return (
-		<tr
-			className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""}`}
-		>
-			<td className="px-4 py-2">
-				<Link
-					href={`/runs/${run.eventId}`}
-					className="font-medium hover:underline"
+		<>
+			<tr
+				className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""}`}
+			>
+				<td className="px-4 py-2">
+					<Link
+						href={`/runs/${run.eventId}`}
+						className="font-medium hover:underline"
+					>
+						{run.title}
+					</Link>
+					<p className="text-xs text-muted-foreground">{date}</p>
+				</td>
+				<td className="px-4 py-2 text-center">${run.amountOwed.toFixed(2)}</td>
+				<td className="px-4 py-2 text-center">
+					{run.amountPaid != null ? `$${run.amountPaid.toFixed(2)}` : "—"}
+				</td>
+				<td className="px-4 py-2 text-center">
+					<Badge variant={status === "paid" ? "default" : "outline"}>
+						{status}
+					</Badge>
+				</td>
+				<td className="px-4 py-2 text-right">
+					<Button
+						size="sm"
+						variant={run.paid ? "default" : "outline"}
+						onClick={() =>
+							onRecord(
+								run.eventId,
+								playerId,
+								run.amountOwed,
+								run.paid ? null : run.amountOwed,
+							)
+						}
+					>
+						{run.paid ? "✓ Paid" : "Mark Paid"}
+					</Button>
+				</td>
+			</tr>
+			{run.plusOnes.map((p1) => (
+				<tr
+					key={p1.userId}
+					className={`${striped ? "bg-muted/30" : "bg-background"} ${isFuture ? "opacity-50" : ""} opacity-80`}
 				>
-					{run.title}
-				</Link>
-				<p className="text-xs text-muted-foreground">{date}</p>
-			</td>
-			<td className="px-4 py-2 text-center">${run.amountOwed.toFixed(2)}</td>
-			<td className="px-4 py-2 text-center">
-				{run.amountPaid != null ? `$${run.amountPaid.toFixed(2)}` : "—"}
-			</td>
-			<td className="px-4 py-2 text-center">
-				<Badge
-					variant={
-						status === "paid"
-							? "default"
-							: status === "partial"
-								? "secondary"
-								: "outline"
-					}
-				>
-					{status}
-				</Badge>
-			</td>
-			<td className="px-4 py-2 text-right">
-				{editingAmount ? (
-					<div className="flex items-center gap-1 justify-end">
-						<input
-							type="number"
-							value={customAmount}
-							onChange={(e) => setCustomAmount(e.target.value)}
-							className="w-16 border rounded px-1 py-0.5 text-xs"
-							placeholder={run.amountOwed.toFixed(2)}
-							autoFocus
-						/>
-						<Button
-							size="sm"
-							onClick={() => {
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									parseFloat(customAmount) || run.amountOwed,
-								);
-								setEditingAmount(false);
-							}}
+					<td className="pl-8 pr-4 py-1.5">
+						<span className="text-xs text-muted-foreground">+1</span>
+					</td>
+					<td className="px-4 py-1.5 text-center text-xs">
+						${p1.amountOwed.toFixed(2)}
+					</td>
+					<td className="px-4 py-1.5 text-center text-xs">
+						{p1.amountPaid != null ? `$${p1.amountPaid.toFixed(2)}` : "—"}
+					</td>
+					<td className="px-4 py-1.5 text-center">
+						<Badge
+							variant={p1.paid ? "default" : "outline"}
+							className="text-xs"
 						>
-							✓
-						</Button>
+							{p1.paid ? "paid" : "unpaid"}
+						</Badge>
+					</td>
+					<td className="px-4 py-1.5 text-right">
 						<Button
 							size="sm"
-							variant="ghost"
-							onClick={() => setEditingAmount(false)}
-						>
-							✕
-						</Button>
-					</div>
-				) : (
-					<div className="flex items-center gap-1 justify-end">
-						{!run.paid && (
-							<button
-								onClick={() => setEditingAmount(true)}
-								className="text-xs text-muted-foreground underline decoration-dotted"
-							>
-								custom
-							</button>
-						)}
-						<Button
-							size="sm"
-							variant={run.paid ? "default" : "outline"}
+							variant={p1.paid ? "default" : "outline"}
 							onClick={() =>
 								onRecord(
 									run.eventId,
-									run.amountOwed,
-									run.paid ? null : run.amountOwed,
+									p1.userId,
+									p1.amountOwed,
+									p1.paid ? null : p1.amountOwed,
 								)
 							}
 						>
-							{run.paid ? "✓ Paid" : "Mark Paid"}
+							{p1.paid ? "✓ Paid" : "Mark Paid"}
 						</Button>
-					</div>
-				)}
-			</td>
-		</tr>
+					</td>
+				</tr>
+			))}
+		</>
 	);
 }
 
 function MobileRunCard({
 	run,
+	playerId,
 	onRecord,
 }: {
 	run: RunEntry;
+	playerId: string;
 	onRecord: (
 		eventId: string,
+		userId: string,
 		amountOwed: number,
 		amountPaid: number | null,
 	) => void;
 }) {
-	const [editingAmount, setEditingAmount] = useState(false);
-	const [customAmount, setCustomAmount] = useState("");
-
 	const isFuture =
 		run.startDate != null && run.startDate > new Date().toISOString();
 
@@ -612,11 +668,7 @@ function MobileRunCard({
 			})
 		: "—";
 
-	const status = !run.paid
-		? "unpaid"
-		: run.amountPaid != null && run.amountPaid !== run.amountOwed
-			? "partial"
-			: "paid";
+	const status = !run.paid ? "unpaid" : "paid";
 
 	return (
 		<div
@@ -632,15 +684,7 @@ function MobileRunCard({
 					</Link>
 					<p className="text-xs text-muted-foreground">{date}</p>
 				</div>
-				<Badge
-					variant={
-						status === "paid"
-							? "default"
-							: status === "partial"
-								? "secondary"
-								: "outline"
-					}
-				>
+				<Badge variant={status === "paid" ? "default" : "outline"}>
 					{status}
 				</Badge>
 			</div>
@@ -650,64 +694,54 @@ function MobileRunCard({
 					<span>Paid: ${run.amountPaid.toFixed(2)}</span>
 				)}
 			</div>
-			<div className="flex items-center gap-2">
-				{editingAmount ? (
-					<>
-						<input
-							type="number"
-							value={customAmount}
-							onChange={(e) => setCustomAmount(e.target.value)}
-							className="w-20 border rounded px-2 py-0.5 text-sm"
-							placeholder={run.amountOwed.toFixed(2)}
-							autoFocus
-						/>
-						<Button
-							size="sm"
-							onClick={() => {
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									parseFloat(customAmount) || run.amountOwed,
-								);
-								setEditingAmount(false);
-							}}
-						>
-							Save
-						</Button>
-						<Button
-							size="sm"
-							variant="ghost"
-							onClick={() => setEditingAmount(false)}
-						>
-							✕
-						</Button>
-					</>
-				) : (
-					<>
-						{!run.paid && (
-							<button
-								onClick={() => setEditingAmount(true)}
-								className="text-xs text-muted-foreground underline decoration-dotted"
+			<Button
+				size="sm"
+				variant={run.paid ? "default" : "outline"}
+				onClick={() =>
+					onRecord(
+						run.eventId,
+						playerId,
+						run.amountOwed,
+						run.paid ? null : run.amountOwed,
+					)
+				}
+			>
+				{run.paid ? "✓ Paid" : "Mark Paid"}
+			</Button>
+			{run.plusOnes.length > 0 && (
+				<div className="border-t pt-2 mt-1 space-y-2">
+					{run.plusOnes.map((p1) => (
+						<div key={p1.userId} className="pl-3 border-l-2 border-muted space-y-1">
+							<div className="flex items-center justify-between gap-2">
+								<span className="text-xs text-muted-foreground">+1</span>
+								<Badge variant={p1.paid ? "default" : "outline"} className="text-xs">
+									{p1.paid ? "paid" : "unpaid"}
+								</Badge>
+							</div>
+							<div className="flex items-center gap-3 text-xs text-muted-foreground">
+								<span>Owed: ${p1.amountOwed.toFixed(2)}</span>
+								{p1.amountPaid != null && (
+									<span>Paid: ${p1.amountPaid.toFixed(2)}</span>
+								)}
+							</div>
+							<Button
+								size="sm"
+								variant={p1.paid ? "default" : "outline"}
+								onClick={() =>
+									onRecord(
+										run.eventId,
+										p1.userId,
+										p1.amountOwed,
+										p1.paid ? null : p1.amountOwed,
+									)
+								}
 							>
-								custom
-							</button>
-						)}
-						<Button
-							size="sm"
-							variant={run.paid ? "default" : "outline"}
-							onClick={() =>
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									run.paid ? null : run.amountOwed,
-								)
-							}
-						>
-							{run.paid ? "✓ Paid" : "Mark Paid"}
-						</Button>
-					</>
-				)}
-			</div>
+								{p1.paid ? "✓ Paid" : "Mark Paid"}
+							</Button>
+						</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

@@ -7,6 +7,21 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 
   const p = rows[0];
 
+  // +1s this player has brought, grouped by run
+  const p1Rows = queries.getPlusOnesForPlayer.all(params.id) as {
+    eventId: string; plusOneUserId: string; amountOwed: number; amountPaid: number | null;
+  }[];
+  const plusOnesByRun = new Map<string, { amountOwed: number; amountPaid: number | null; paid: boolean; userId: string }[]>();
+  for (const r of p1Rows) {
+    if (!plusOnesByRun.has(r.eventId)) plusOnesByRun.set(r.eventId, []);
+    plusOnesByRun.get(r.eventId)!.push({
+      userId: r.plusOneUserId,
+      amountOwed: r.amountOwed,
+      amountPaid: r.amountPaid,
+      paid: r.amountPaid != null,
+    });
+  }
+
   const runs = rows
     .filter(r => r.eventId)
     .map(r => {
@@ -22,6 +37,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         paid: amountPaid != null,
         method: r.method,
         note: r.note,
+        plusOnes: plusOnesByRun.get(r.eventId) ?? [],
       };
     });
 

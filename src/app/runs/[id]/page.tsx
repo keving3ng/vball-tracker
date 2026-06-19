@@ -77,6 +77,8 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const [editingTitle, setEditingTitle] = useState(false);
 	const [titleVal, setTitleVal] = useState("");
 	const [reminderCopied, setReminderCopied] = useState(false);
+	const [prevRunId, setPrevRunId] = useState<string | null>(null);
+	const [nextRunId, setNextRunId] = useState<string | null>(null);
 
 	const loadAuditLog = useCallback(
 		async (force = false) => {
@@ -120,9 +122,10 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	}, [params.id]);
 
 	const load = useCallback(async () => {
-		const [runRes, presetsRes] = await Promise.all([
+		const [runRes, presetsRes, allRunsRes] = await Promise.all([
 			fetch(`/api/runs/${params.id}`),
 			fetch("/api/settings?key=costPresets"),
+			fetch("/api/runs"),
 		]);
 		if (runRes.ok) {
 			setRun(await runRes.json());
@@ -130,6 +133,22 @@ export default function RunPage({ params }: { params: { id: string } }) {
 			await sync();
 		}
 		if (presetsRes.ok) setPresets(await presetsRes.json());
+		if (allRunsRes.ok) {
+			const { upcoming, past } = await allRunsRes.json();
+			const all: { id: string; startDate: string | null }[] = [
+				...upcoming,
+				...past,
+			];
+			all.sort((a, b) => {
+				if (!a.startDate && !b.startDate) return 0;
+				if (!a.startDate) return 1;
+				if (!b.startDate) return -1;
+				return a.startDate.localeCompare(b.startDate);
+			});
+			const idx = all.findIndex((r) => r.id === params.id);
+			setPrevRunId(idx > 0 ? all[idx - 1].id : null);
+			setNextRunId(idx >= 0 && idx < all.length - 1 ? all[idx + 1].id : null);
+		}
 		setLoading(false);
 	}, [params.id, sync]);
 
@@ -173,22 +192,31 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		);
 	};
 
-	const updateCost = async (totalCost: number, splitCount: number) => {
+	const updateCost = async (
+		totalCost: number,
+		splitCount: number,
+		resetPayments = false,
+	) => {
 		await fetch(`/api/runs/${params.id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ totalCost, splitCount }),
+			body: JSON.stringify({ totalCost, splitCount, resetPayments }),
 		});
-		setRun((prev) =>
-			prev
-				? {
-						...prev,
-						totalCost,
-						splitCount,
-						costPerHead: totalCost / splitCount,
-					}
-				: prev,
-		);
+		if (resetPayments) {
+			const res = await fetch(`/api/runs/${params.id}`);
+			if (res.ok) setRun(await res.json());
+		} else {
+			setRun((prev) =>
+				prev
+					? {
+							...prev,
+							totalCost,
+							splitCount,
+							costPerHead: totalCost / splitCount,
+						}
+					: prev,
+			);
+		}
 	};
 
 	const updateNotes = async (notes: string) => {
@@ -344,6 +372,33 @@ export default function RunPage({ params }: { params: { id: string } }) {
 
 	return (
 		<div className="space-y-5">
+			{/* Prev/Next run navigation */}
+			<div className="flex items-center justify-between text-sm">
+				{prevRunId ? (
+					<Link
+						href={`/runs/${prevRunId}`}
+						className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+					>
+						← Prev run
+					</Link>
+				) : (
+					<span />
+				)}
+				<Link href="/" className="text-xs text-muted-foreground hover:text-foreground">
+					All runs
+				</Link>
+				{nextRunId ? (
+					<Link
+						href={`/runs/${nextRunId}`}
+						className="text-muted-foreground hover:text-foreground flex items-center gap-1"
+					>
+						Next run →
+					</Link>
+				) : (
+					<span />
+				)}
+			</div>
+
 			{/* Header */}
 			<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
 				<div className="space-y-1">
@@ -545,7 +600,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 							presets={presets}
 							onUpdate={updateCost}
 							onSavePreset={savePreset}
-							onApplyPreset={(p) => updateCost(p.totalCost, p.splitCount)}
+							onApplyPreset={(p) => updateCost(p.totalCost, p.splitCount, true)}
 						/>
 						<HostSection
 							hostUserId={run.hostUserId}
@@ -817,10 +872,7 @@ function PaymentRow({
 	plusOneCount?: number;
 	isSubRow?: boolean;
 }) {
-	const [editingAmount, setEditingAmount] = useState(false);
-	const [customAmount, setCustomAmount] = useState("");
 	const amountOwed = guest.payment?.amount ?? costPerHead;
-	const amountPaid = guest.payment?.amountPaid;
 	const isPaid = guest.payment?.amountPaid != null;
 	const credit = guest.priorBalance ?? 0;
 
@@ -831,58 +883,15 @@ function PaymentRow({
 				isSubRow && "pl-10",
 			)}
 		>
-			{!isPaid && editingAmount ? (
-				<>
-					<input
-						type="number"
-						value={customAmount}
-						onChange={(e) => setCustomAmount(e.target.value)}
-						className="w-20 border rounded px-2 py-0.5 text-sm"
-						placeholder={amountOwed.toFixed(2)}
-						autoFocus
-					/>
-					<Button
-						size="sm"
-						onClick={() => {
-							onRecord(
-								guest.userId,
-								amountOwed,
-								parseFloat(customAmount) || amountOwed,
-							);
-							setEditingAmount(false);
-						}}
-					>
-						Save
-					</Button>
-					<Button
-						size="sm"
-						variant="ghost"
-						onClick={() => setEditingAmount(false)}
-					>
-						✕
-					</Button>
-				</>
-			) : (
-				<>
-					{!isPaid && (
-						<button
-							onClick={() => setEditingAmount(true)}
-							className="text-xs text-muted-foreground underline decoration-dotted"
-						>
-							custom
-						</button>
-					)}
-					<Button
-						variant={isPaid ? "default" : "outline"}
-						size="sm"
-						onClick={() =>
-							onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)
-						}
-					>
-						{isPaid ? "✓ Paid" : "Mark Paid"}
-					</Button>
-				</>
-			)}
+			<Button
+				variant={isPaid ? "default" : "outline"}
+				size="sm"
+				onClick={() =>
+					onRecord(guest.userId, amountOwed, isPaid ? null : amountOwed)
+				}
+			>
+				{isPaid ? "✓ Paid" : "Mark Paid"}
+			</Button>
 			<div className="flex items-center gap-3">
 				<Link
 					href={`/players/${guest.userId}`}
@@ -898,11 +907,6 @@ function PaymentRow({
 				<span className="text-sm text-muted-foreground">
 					${amountOwed.toFixed(2)}
 				</span>
-				{isPaid && amountPaid != null && amountPaid !== amountOwed && (
-					<span className="text-xs text-muted-foreground">
-						(paid ${amountPaid.toFixed(2)})
-					</span>
-				)}
 				{credit > 0 && (
 					<span className="text-xs text-green-600 dark:text-green-400">
 						credit ${credit.toFixed(2)}
@@ -924,7 +928,7 @@ function CostSection({
 	totalCost: number | null;
 	splitCount: number;
 	presets: Preset[];
-	onUpdate: (t: number, s: number) => void;
+	onUpdate: (t: number, s: number, resetPayments?: boolean) => void;
 	onSavePreset: () => void;
 	onApplyPreset: (p: Preset) => void;
 }) {
@@ -937,6 +941,22 @@ function CostSection({
 	}, [totalCost, splitCount]);
 	const costPerHead =
 		totalCost != null ? (totalCost / splitCount).toFixed(2) : null;
+
+	const handleSave = () => {
+		const newCost = parseFloat(cost);
+		const newSplit = parseInt(split) || 12;
+		if (totalCost != null) {
+			const newPerHead = (newCost / newSplit).toFixed(2);
+			const confirmed = window.confirm(
+				`Change run cost to $${newCost.toFixed(2)} ÷ ${newSplit} = $${newPerHead}/head?\n\nThis will reset all payment statuses to unpaid (except the host and players with sufficient credit).`,
+			);
+			if (!confirmed) return;
+			onUpdate(newCost, newSplit, true);
+		} else {
+			onUpdate(newCost, newSplit, false);
+		}
+		setEditing(false);
+	};
 
 	if (!editing)
 		return (
@@ -959,8 +979,13 @@ function CostSection({
 						defaultValue=""
 						onChange={(e) => {
 							const p = presets[parseInt(e.target.value)];
-							if (p) onApplyPreset(p);
+							if (!p) return;
 							e.target.value = "";
+							const perHead = (p.totalCost / p.splitCount).toFixed(2);
+							const confirmed = window.confirm(
+								`Apply preset "${p.name}"?\n$${p.totalCost.toFixed(2)} ÷ ${p.splitCount} = $${perHead}/head\n\nThis will reset all payment statuses to unpaid (except the host and players with sufficient credit).`,
+							);
+							if (confirmed) onApplyPreset(p);
 						}}
 					>
 						<option value="">Apply preset…</option>
@@ -992,6 +1017,10 @@ function CostSection({
 				className="w-20 border rounded px-2 py-0.5"
 				placeholder="120"
 				autoFocus
+				onKeyDown={(e) => {
+					if (e.key === "Enter") handleSave();
+					if (e.key === "Escape") setEditing(false);
+				}}
 			/>
 			<span className="text-muted-foreground">÷</span>
 			<input
@@ -999,14 +1028,12 @@ function CostSection({
 				value={split}
 				onChange={(e) => setSplit(e.target.value)}
 				className="w-16 border rounded px-2 py-0.5"
-			/>
-			<Button
-				size="sm"
-				onClick={() => {
-					onUpdate(parseFloat(cost), parseInt(split) || 12);
-					setEditing(false);
+				onKeyDown={(e) => {
+					if (e.key === "Enter") handleSave();
+					if (e.key === "Escape") setEditing(false);
 				}}
-			>
+			/>
+			<Button size="sm" onClick={handleSave}>
 				Save
 			</Button>
 			<Button size="sm" variant="ghost" onClick={() => setEditing(false)}>

@@ -266,7 +266,8 @@ export const queries = {
           COALESCE(pay.amountPaid, 0) -
           COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END)
         ELSE 0 END
-      ), 0) as balance
+      ), 0) as balance,
+      MAX(CASE WHEN r.startDate IS NOT NULL AND r.startDate <= datetime('now') THEN r.startDate END) as lastAttendedDate
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
     LEFT JOIN runs r ON r.eventId = a.eventId
@@ -388,6 +389,65 @@ export const queries = {
       SELECT userId FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
     )
   `),
+
+	getPlusOnesForHost: db.prepare(
+		`SELECT userId FROM attendance WHERE plus_one_of = ? AND eventId = ?`,
+	),
+
+	// All non-anon players' unpaid past run fees (for reconcile)
+	getUnpaidRunsForReconcile: db.prepare(`
+    SELECT
+      p.userId, p.name, p.displayName,
+      r.eventId, r.title, r.startDate,
+      COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) AS amountOwed
+    FROM players p
+    JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
+    JOIN runs r ON r.eventId = a.eventId
+    LEFT JOIN payments pay ON pay.eventId = r.eventId AND pay.userId = p.userId
+    WHERE
+      (p.is_anon_plus_one IS NULL OR p.is_anon_plus_one = 0)
+      AND r.startDate IS NOT NULL AND r.startDate <= datetime('now')
+      AND pay.amountPaid IS NULL
+      AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0
+    ORDER BY p.userId, r.startDate DESC
+  `),
+
+	// Unpaid +1 fees grouped by the host player (for reconcile)
+	getUnpaidPlusOnesForReconcile: db.prepare(`
+    SELECT
+      a_host.userId AS hostUserId,
+      a_p1.userId AS plusOneUserId,
+      r.eventId, r.title, r.startDate,
+      COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) AS amountOwed
+    FROM attendance a_host
+    JOIN attendance a_p1 ON a_p1.plus_one_of = a_host.userId AND a_p1.eventId = a_host.eventId
+    JOIN runs r ON r.eventId = a_host.eventId
+    LEFT JOIN payments pay ON pay.eventId = a_p1.eventId AND pay.userId = a_p1.userId
+    WHERE
+      a_host.rsvpStatus = 'GOING' AND a_p1.rsvpStatus = 'GOING'
+      AND r.startDate IS NOT NULL AND r.startDate <= datetime('now')
+      AND pay.amountPaid IS NULL
+      AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0
+    ORDER BY a_host.userId, r.startDate DESC
+  `),
+
+	// All +1s brought by a player, with their payment status (for player profile)
+	getPlusOnesForPlayer: db.prepare(`
+    SELECT
+      a.eventId,
+      a.userId AS plusOneUserId,
+      COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) AS amountOwed,
+      pay.amountPaid
+    FROM attendance a
+    JOIN runs r ON r.eventId = a.eventId
+    LEFT JOIN payments pay ON pay.eventId = a.eventId AND pay.userId = a.userId
+    WHERE a.plus_one_of = ?
+    ORDER BY r.startDate DESC
+  `),
+
+	clearAllPaymentsForRun: db.prepare(
+		`UPDATE payments SET amountPaid = NULL, paid = 0 WHERE eventId = ?`,
+	),
 
 	// Returns a player's balance across all runs except the given eventId.
 	// Used to detect credit that can auto-cover a new run.
