@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEventGuests } from "@keg/partiful-api";
-import { queries, purgePlusOnesForHost } from "@/lib/db";
+import { queries } from "@/lib/db";
 
 export async function POST(
 	_req: Request,
@@ -44,11 +44,35 @@ export async function POST(
 			queries.deleteUnpaidPayment.run(params.id, guest.userId);
 		}
 
-		// Handle +1s: guest.count = total headcount including the guest themselves
-		purgePlusOnesForHost(params.id, guest.userId);
-		const plusOneCount = (guest.count ?? 1) - 1;
-		if (plusOneCount > 0) {
-			for (let i = 0; i < plusOneCount; i++) {
+		// Handle +1s: update existing ones (preserves manually added +1s), add new ones if Partiful count increased
+		const existingPlusOnes = queries.getPlusOnesForHost.all(
+			guest.userId,
+			params.id,
+		) as { userId: string }[];
+		const partifulPlusOneCount = (guest.count ?? 1) - 1;
+
+		// Update status/payments for all existing +1s
+		for (const p1 of existingPlusOnes) {
+			queries.upsertAttendancePlusOne.run({
+				eventId: params.id,
+				userId: p1.userId,
+				rsvpStatus: guest.status,
+				plusOneOf: guest.userId,
+			});
+			if (runHasHappened && guest.status === "GOING" && amountOwed > 0) {
+				queries.upsertPaymentOwed.run({
+					eventId: params.id,
+					userId: p1.userId,
+					amount: amountOwed,
+				});
+			} else if (guest.status !== "GOING") {
+				queries.deleteUnpaidPayment.run(params.id, p1.userId);
+			}
+		}
+
+		// Add new +1s only if Partiful reports more than currently exist
+		if (partifulPlusOneCount > existingPlusOnes.length) {
+			for (let i = existingPlusOnes.length; i < partifulPlusOneCount; i++) {
 				const plusOneUserId = `${guest.userId}__plus1__${params.id}__${i}`;
 				queries.upsertAnonPlusOnePlayer.run({ userId: plusOneUserId });
 				queries.upsertAttendancePlusOne.run({
@@ -63,8 +87,6 @@ export async function POST(
 						userId: plusOneUserId,
 						amount: amountOwed,
 					});
-				} else if (guest.status !== "GOING") {
-					queries.deleteUnpaidPayment.run(params.id, plusOneUserId);
 				}
 			}
 		}

@@ -83,6 +83,9 @@ export async function PATCH(
 		const runHasHappened =
 			run?.startDate != null && run.startDate <= new Date().toISOString();
 		if (runHasHappened && newTotalCost != null && newTotalCost > 0) {
+			if (body.resetPayments) {
+				queries.clearAllPaymentsForRun.run(params.id);
+			}
 			const amountOwed = newTotalCost / newSplitCount;
 			const going = queries.getGoingAttendance.all(params.id) as {
 				userId: string;

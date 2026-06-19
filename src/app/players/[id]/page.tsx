@@ -50,14 +50,25 @@ export default function PlayerProfilePage({
 	const [mergePlayers, setMergePlayers] = useState<PlayerBasic[]>([]);
 	const [mergeTarget, setMergeTarget] = useState<PlayerBasic | null>(null);
 	const [merging, setMerging] = useState(false);
+	const [prevPlayerId, setPrevPlayerId] = useState<string | null>(null);
+	const [nextPlayerId, setNextPlayerId] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
-		const res = await fetch(`/api/players/${params.id}`);
+		const [res, allRes] = await Promise.all([
+			fetch(`/api/players/${params.id}`),
+			fetch("/api/players"),
+		]);
 		if (res.ok) {
 			const data = await res.json();
 			setPlayer(data);
 			setNameVal(data.displayName ?? "");
 			setNotesVal(data.notes ?? "");
+		}
+		if (allRes.ok) {
+			const all = (await allRes.json()) as PlayerBasic[];
+			const idx = all.findIndex((p) => p.userId === params.id);
+			setPrevPlayerId(idx > 0 ? all[idx - 1].userId : null);
+			setNextPlayerId(idx >= 0 && idx < all.length - 1 ? all[idx + 1].userId : null);
 		}
 		setLoading(false);
 	}, [params.id]);
@@ -152,8 +163,25 @@ export default function PlayerProfilePage({
 	const copyReminder = async () => {
 		if (!player) return;
 		const owed = Math.abs(player.balance).toFixed(2);
-		const runCount = player.runs.filter((r) => !r.paid).length;
-		const msg = `Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}. Please etransfer me at kevingeng33@gmail.com when you get the chance!`;
+		const unpaidRuns = player.runs.filter((r) => !r.paid && r.startDate != null && r.startDate <= new Date().toISOString());
+		const runCount = unpaidRuns.length;
+		const lines = unpaidRuns.map((r) => {
+			const date = r.startDate
+				? new Date(r.startDate).toLocaleDateString("en-CA", {
+						month: "short",
+						day: "numeric",
+						timeZone: "America/Toronto",
+					})
+				: "Unknown date";
+			return `• ${date} ($${r.amountOwed.toFixed(2)})`;
+		});
+		const msg = [
+			`Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}:`,
+			"",
+			...lines,
+			"",
+			`Let me know if any of these are incorrect and etransfer me at kevingeng33@gmail.com when you get the chance! Thanks :)`,
+		].join("\n");
 		await navigator.clipboard.writeText(msg);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
@@ -166,12 +194,31 @@ export default function PlayerProfilePage({
 
 	return (
 		<div className="space-y-6">
-			<Link
-				href="/players"
-				className="text-sm text-muted-foreground hover:text-foreground"
-			>
-				← Players
-			</Link>
+			<div className="flex items-center justify-between text-sm">
+				{prevPlayerId ? (
+					<Link
+						href={`/players/${prevPlayerId}`}
+						className="text-muted-foreground hover:text-foreground"
+					>
+						← Prev player
+					</Link>
+				) : (
+					<span />
+				)}
+				<Link href="/players" className="text-xs text-muted-foreground hover:text-foreground">
+					All players
+				</Link>
+				{nextPlayerId ? (
+					<Link
+						href={`/players/${nextPlayerId}`}
+						className="text-muted-foreground hover:text-foreground"
+					>
+						Next player →
+					</Link>
+				) : (
+					<span />
+				)}
+			</div>
 
 			<div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
 				<div className="space-y-1">
@@ -473,9 +520,6 @@ function RunHistoryRow({
 		amountPaid: number | null,
 	) => void;
 }) {
-	const [editingAmount, setEditingAmount] = useState(false);
-	const [customAmount, setCustomAmount] = useState("");
-
 	const isFuture =
 		run.startDate != null && run.startDate > new Date().toISOString();
 
@@ -488,11 +532,7 @@ function RunHistoryRow({
 			})
 		: "—";
 
-	const status = !run.paid
-		? "unpaid"
-		: run.amountPaid != null && run.amountPaid !== run.amountOwed
-			? "partial"
-			: "paid";
+	const status = !run.paid ? "unpaid" : "paid";
 
 	return (
 		<tr
@@ -512,75 +552,24 @@ function RunHistoryRow({
 				{run.amountPaid != null ? `$${run.amountPaid.toFixed(2)}` : "—"}
 			</td>
 			<td className="px-4 py-2 text-center">
-				<Badge
-					variant={
-						status === "paid"
-							? "default"
-							: status === "partial"
-								? "secondary"
-								: "outline"
-					}
-				>
+				<Badge variant={status === "paid" ? "default" : "outline"}>
 					{status}
 				</Badge>
 			</td>
 			<td className="px-4 py-2 text-right">
-				{editingAmount ? (
-					<div className="flex items-center gap-1 justify-end">
-						<input
-							type="number"
-							value={customAmount}
-							onChange={(e) => setCustomAmount(e.target.value)}
-							className="w-16 border rounded px-1 py-0.5 text-xs"
-							placeholder={run.amountOwed.toFixed(2)}
-							autoFocus
-						/>
-						<Button
-							size="sm"
-							onClick={() => {
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									parseFloat(customAmount) || run.amountOwed,
-								);
-								setEditingAmount(false);
-							}}
-						>
-							✓
-						</Button>
-						<Button
-							size="sm"
-							variant="ghost"
-							onClick={() => setEditingAmount(false)}
-						>
-							✕
-						</Button>
-					</div>
-				) : (
-					<div className="flex items-center gap-1 justify-end">
-						{!run.paid && (
-							<button
-								onClick={() => setEditingAmount(true)}
-								className="text-xs text-muted-foreground underline decoration-dotted"
-							>
-								custom
-							</button>
-						)}
-						<Button
-							size="sm"
-							variant={run.paid ? "default" : "outline"}
-							onClick={() =>
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									run.paid ? null : run.amountOwed,
-								)
-							}
-						>
-							{run.paid ? "✓ Paid" : "Mark Paid"}
-						</Button>
-					</div>
-				)}
+				<Button
+					size="sm"
+					variant={run.paid ? "default" : "outline"}
+					onClick={() =>
+						onRecord(
+							run.eventId,
+							run.amountOwed,
+							run.paid ? null : run.amountOwed,
+						)
+					}
+				>
+					{run.paid ? "✓ Paid" : "Mark Paid"}
+				</Button>
 			</td>
 		</tr>
 	);
@@ -597,9 +586,6 @@ function MobileRunCard({
 		amountPaid: number | null,
 	) => void;
 }) {
-	const [editingAmount, setEditingAmount] = useState(false);
-	const [customAmount, setCustomAmount] = useState("");
-
 	const isFuture =
 		run.startDate != null && run.startDate > new Date().toISOString();
 
@@ -612,11 +598,7 @@ function MobileRunCard({
 			})
 		: "—";
 
-	const status = !run.paid
-		? "unpaid"
-		: run.amountPaid != null && run.amountPaid !== run.amountOwed
-			? "partial"
-			: "paid";
+	const status = !run.paid ? "unpaid" : "paid";
 
 	return (
 		<div
@@ -632,15 +614,7 @@ function MobileRunCard({
 					</Link>
 					<p className="text-xs text-muted-foreground">{date}</p>
 				</div>
-				<Badge
-					variant={
-						status === "paid"
-							? "default"
-							: status === "partial"
-								? "secondary"
-								: "outline"
-					}
-				>
+				<Badge variant={status === "paid" ? "default" : "outline"}>
 					{status}
 				</Badge>
 			</div>
@@ -650,64 +624,19 @@ function MobileRunCard({
 					<span>Paid: ${run.amountPaid.toFixed(2)}</span>
 				)}
 			</div>
-			<div className="flex items-center gap-2">
-				{editingAmount ? (
-					<>
-						<input
-							type="number"
-							value={customAmount}
-							onChange={(e) => setCustomAmount(e.target.value)}
-							className="w-20 border rounded px-2 py-0.5 text-sm"
-							placeholder={run.amountOwed.toFixed(2)}
-							autoFocus
-						/>
-						<Button
-							size="sm"
-							onClick={() => {
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									parseFloat(customAmount) || run.amountOwed,
-								);
-								setEditingAmount(false);
-							}}
-						>
-							Save
-						</Button>
-						<Button
-							size="sm"
-							variant="ghost"
-							onClick={() => setEditingAmount(false)}
-						>
-							✕
-						</Button>
-					</>
-				) : (
-					<>
-						{!run.paid && (
-							<button
-								onClick={() => setEditingAmount(true)}
-								className="text-xs text-muted-foreground underline decoration-dotted"
-							>
-								custom
-							</button>
-						)}
-						<Button
-							size="sm"
-							variant={run.paid ? "default" : "outline"}
-							onClick={() =>
-								onRecord(
-									run.eventId,
-									run.amountOwed,
-									run.paid ? null : run.amountOwed,
-								)
-							}
-						>
-							{run.paid ? "✓ Paid" : "Mark Paid"}
-						</Button>
-					</>
-				)}
-			</div>
+			<Button
+				size="sm"
+				variant={run.paid ? "default" : "outline"}
+				onClick={() =>
+					onRecord(
+						run.eventId,
+						run.amountOwed,
+						run.paid ? null : run.amountOwed,
+					)
+				}
+			>
+				{run.paid ? "✓ Paid" : "Mark Paid"}
+			</Button>
 		</div>
 	);
 }

@@ -266,7 +266,8 @@ export const queries = {
           COALESCE(pay.amountPaid, 0) -
           COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END)
         ELSE 0 END
-      ), 0) as balance
+      ), 0) as balance,
+      MAX(CASE WHEN r.startDate IS NOT NULL AND r.startDate <= datetime('now') THEN r.startDate END) as lastAttendedDate
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'
     LEFT JOIN runs r ON r.eventId = a.eventId
@@ -388,6 +389,14 @@ export const queries = {
       SELECT userId FROM attendance WHERE plus_one_of = @hostUserId AND eventId = @eventId
     )
   `),
+
+	getPlusOnesForHost: db.prepare(
+		`SELECT userId FROM attendance WHERE plus_one_of = ? AND eventId = ?`,
+	),
+
+	clearAllPaymentsForRun: db.prepare(
+		`UPDATE payments SET amountPaid = NULL, paid = 0 WHERE eventId = ?`,
+	),
 
 	// Returns a player's balance across all runs except the given eventId.
 	// Used to detect credit that can auto-cover a new run.
