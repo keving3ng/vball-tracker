@@ -16,6 +16,7 @@ interface PartifulEvent {
 	goingCount: number;
 	paidCount: number;
 	totalCount: number;
+	isHosting: boolean;
 }
 
 interface PlayerBalance {
@@ -42,6 +43,7 @@ export default function Dashboard() {
 	const [showDotMenu, setShowDotMenu] = useState(false);
 	const [pastPagesShown, setPastPagesShown] = useState(1);
 	const [syncing, setSyncing] = useState<string | null>(null);
+	const [showAllRuns, setShowAllRuns] = useState(false);
 	const dotMenuRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -119,8 +121,16 @@ export default function Dashboard() {
 		0,
 	);
 
+	const hostedUpcoming = showAllRuns
+		? upcoming
+		: upcoming.filter((e) => e.isHosting);
+	const hostedPast = showAllRuns ? past : past.filter((e) => e.isHosting);
+	const hiddenCount =
+		upcoming.filter((e) => !e.isHosting).length +
+		past.filter((e) => !e.isHosting).length;
+
 	// Sort upcoming ASC (nearest first for display; last item = most future for "new run" nav)
-	const sortedUpcoming = [...upcoming].sort((a, b) => {
+	const sortedUpcoming = [...hostedUpcoming].sort((a, b) => {
 		if (!a.startDate && !b.startDate) return 0;
 		if (!a.startDate) return 1;
 		if (!b.startDate) return -1;
@@ -130,7 +140,7 @@ export default function Dashboard() {
 	const otherUpcoming = sortedUpcoming.slice(1);
 
 	// Sort past DESC (most recent first)
-	const sortedPast = [...past].sort((a, b) => {
+	const sortedPast = [...hostedPast].sort((a, b) => {
 		if (!a.startDate && !b.startDate) return 0;
 		if (!a.startDate) return 1;
 		if (!b.startDate) return -1;
@@ -144,6 +154,18 @@ export default function Dashboard() {
 
 	return (
 		<div className="space-y-8">
+			{hiddenCount > 0 && (
+				<label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer w-fit">
+					<input
+						type="checkbox"
+						checked={showAllRuns}
+						onChange={(e) => setShowAllRuns(e.target.checked)}
+						className="accent-foreground"
+					/>
+					Show {hiddenCount} run{hiddenCount !== 1 ? "s" : ""} I&apos;m not hosting
+				</label>
+			)}
+
 			{/* Outstanding section */}
 			{owing.length > 0 && (
 				<div className="space-y-2">

@@ -35,6 +35,7 @@ export async function GET(
 		notes: r0.notes,
 		syncedAt: r0.syncedAt,
 		hostUserId: r0.hostUserId ?? null,
+		isHosting: r0.isHosting !== 0,
 		guests: rows
 			.filter((r) => r.userId)
 			.map((r) => ({
@@ -131,6 +132,12 @@ export async function PATCH(
 	}
 	if (body.notes !== undefined) {
 		queries.updateRunNotes.run({ eventId: params.id, notes: body.notes });
+	}
+	if ("isHosting" in body) {
+		queries.updateRunHosting.run({
+			eventId: params.id,
+			isHosting: body.isHosting ? 1 : 0,
+		});
 	}
 	if ("hostUserId" in body) {
 		const current = queries.getRunBasic.get(params.id) as any;

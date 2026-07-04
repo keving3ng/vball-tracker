@@ -70,7 +70,8 @@ for (const sql of [
 	`ALTER TABLE runs ADD COLUMN hostUserId TEXT`,
 	`ALTER TABLE attendance ADD COLUMN plus_one_of TEXT`,
 	`ALTER TABLE players ADD COLUMN is_anon_plus_one INTEGER DEFAULT 0`,
-	`ALTER TABLE runs ADD COLUMN displayTitle TEXT`, // NEW
+	`ALTER TABLE runs ADD COLUMN displayTitle TEXT`,
+	`ALTER TABLE runs ADD COLUMN isHosting INTEGER DEFAULT 1`, // NEW
 ]) {
 	try {
 		db.exec(sql);
@@ -96,6 +97,7 @@ export interface Run {
 	notes: string | null;
 	syncedAt: string | null;
 	hostUserId: string | null;
+	isHosting: number;
 }
 export interface AttendanceRow {
 	eventId: string;
@@ -194,12 +196,16 @@ export const queries = {
     UPDATE runs SET hostUserId = @hostUserId WHERE eventId = @eventId
   `),
 
+	updateRunHosting: db.prepare(`
+    UPDATE runs SET isHosting = @isHosting WHERE eventId = @eventId
+  `),
+
 	updateRunDisplayTitle: db.prepare(`
     UPDATE runs SET displayTitle = @displayTitle WHERE eventId = @eventId
   `),
 
 	getRunDisplayTitles: db.prepare(`
-    SELECT r.eventId, r.displayTitle, r.syncedAt,
+    SELECT r.eventId, r.displayTitle, r.syncedAt, r.isHosting,
       COUNT(CASE WHEN a.rsvpStatus = 'GOING' THEN 1 END) as goingCount
     FROM runs r
     LEFT JOIN attendance a ON a.eventId = r.eventId
@@ -273,6 +279,7 @@ export const queries = {
     LEFT JOIN runs r ON r.eventId = a.eventId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
     WHERE (p.is_anon_plus_one IS NULL OR p.is_anon_plus_one = 0)
+      AND (r.eventId IS NULL OR r.isHosting IS NULL OR r.isHosting = 1)
     GROUP BY p.userId
     ORDER BY totalRuns DESC
   `),
@@ -287,6 +294,7 @@ export const queries = {
     LEFT JOIN runs r ON r.eventId = a.eventId
     LEFT JOIN payments pay ON pay.userId = p.userId AND pay.eventId = a.eventId
     WHERE p.userId = ?
+      AND (r.eventId IS NULL OR r.isHosting IS NULL OR r.isHosting = 1)
     ORDER BY r.startDate DESC
   `),
 
@@ -297,6 +305,7 @@ export const queries = {
     LEFT JOIN attendance a
       ON a.eventId = r.eventId AND a.userId = ? AND a.rsvpStatus = 'GOING'
     WHERE r.startDate IS NOT NULL
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
     ORDER BY r.startDate DESC
   `),
 
@@ -407,6 +416,7 @@ export const queries = {
     WHERE
       (p.is_anon_plus_one IS NULL OR p.is_anon_plus_one = 0)
       AND r.startDate IS NOT NULL AND r.startDate <= datetime('now')
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
       AND pay.amountPaid IS NULL
       AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0
     ORDER BY p.userId, r.startDate DESC
@@ -426,6 +436,7 @@ export const queries = {
     WHERE
       a_host.rsvpStatus = 'GOING' AND a_p1.rsvpStatus = 'GOING'
       AND r.startDate IS NOT NULL AND r.startDate <= datetime('now')
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
       AND pay.amountPaid IS NULL
       AND COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) > 0
     ORDER BY a_host.userId, r.startDate DESC
@@ -442,6 +453,7 @@ export const queries = {
     JOIN runs r ON r.eventId = a.eventId
     LEFT JOIN payments pay ON pay.eventId = a.eventId AND pay.userId = a.userId
     WHERE a.plus_one_of = ?
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
     ORDER BY r.startDate DESC
   `),
 

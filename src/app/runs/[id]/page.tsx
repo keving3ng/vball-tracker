@@ -38,6 +38,7 @@ interface Run {
 	notes: string | null;
 	syncedAt: string | null;
 	hostUserId: string | null;
+	isHosting: boolean;
 	guests: Guest[];
 }
 
@@ -263,6 +264,16 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		});
 	};
 
+	const updateHosting = async (isHosting: boolean) => {
+		await fetch(`/api/runs/${params.id}`, {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ isHosting }),
+		});
+		setRun((prev) => (prev ? { ...prev, isHosting } : prev));
+		if (!isHosting) setActiveTab("guests");
+	};
+
 	const updateDisplayTitle = async (displayTitle: string | null) => {
 		await fetch(`/api/runs/${params.id}`, {
 			method: "PATCH",
@@ -462,7 +473,19 @@ export default function RunPage({ params }: { params: { id: string } }) {
 					<NotesField value={run.notes} onSave={updateNotes} />
 				</div>
 				<div className="flex gap-2 self-start flex-wrap justify-end">
-					{run.costPerHead != null && (
+					<Button
+						onClick={() => updateHosting(!run.isHosting)}
+						variant="outline"
+						size="sm"
+						title={
+							run.isHosting
+								? "I'm hosting this run — mark as just attending instead"
+								: "Just attending — mark as a run I'm hosting"
+						}
+					>
+						{run.isHosting ? "🏠 Hosting" : "Not hosting"}
+					</Button>
+					{run.isHosting && run.costPerHead != null && (
 						<Button onClick={copyEventReminder} variant="outline" size="sm">
 							{reminderCopied ? "Copied!" : "Copy reminder"}
 						</Button>
@@ -490,13 +513,17 @@ export default function RunPage({ params }: { params: { id: string } }) {
 						{run.capacity ? ` / ${run.capacity}` : ""}
 					</span>
 				</div>
-				<div className="w-px bg-border" />
-				<div className="flex items-baseline gap-1.5">
-					<span className="text-muted-foreground">Paid</span>
-					<span className="font-semibold text-base">
-						{paid.length} / {going.length}
-					</span>
-				</div>
+				{run.isHosting && (
+					<>
+						<div className="w-px bg-border" />
+						<div className="flex items-baseline gap-1.5">
+							<span className="text-muted-foreground">Paid</span>
+							<span className="font-semibold text-base">
+								{paid.length} / {going.length}
+							</span>
+						</div>
+					</>
+				)}
 			</div>
 
 			{/* Custom tab nav */}
@@ -512,16 +539,18 @@ export default function RunPage({ params }: { params: { id: string } }) {
 					>
 						Guest List
 					</button>
-					<button
-						onClick={() => setActiveTab("payments")}
-						className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-							activeTab === "payments"
-								? "border-foreground text-foreground"
-								: "border-transparent text-muted-foreground hover:text-foreground"
-						}`}
-					>
-						Payments
-					</button>
+					{run.isHosting && (
+						<button
+							onClick={() => setActiveTab("payments")}
+							className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+								activeTab === "payments"
+									? "border-foreground text-foreground"
+									: "border-transparent text-muted-foreground hover:text-foreground"
+							}`}
+						>
+							Payments
+						</button>
+					)}
 				</div>
 
 				{activeTab === "guests" && (
