@@ -23,6 +23,7 @@ interface EnrichedEvent extends PartifulEventRaw {
 	goingCount: number;
 	paidCount: number;
 	totalCount: number;
+	isHosting: boolean;
 }
 
 export async function GET() {
@@ -56,6 +57,7 @@ export async function GET() {
 		displayTitle: string | null;
 		syncedAt: string | null;
 		goingCount: number;
+		isHosting: number | null;
 	}[];
 	const runMetaMap = new Map(runMetaRows.map((r) => [r.eventId, r]));
 
@@ -73,6 +75,7 @@ export async function GET() {
 		goingCount: runMetaMap.get(event.id)?.goingCount ?? 0,
 		paidCount: paymentMap.get(event.id)?.paidCount ?? 0,
 		totalCount: paymentMap.get(event.id)?.totalCount ?? 0,
+		isHosting: runMetaMap.get(event.id)?.isHosting !== 0,
 	});
 
 	return NextResponse.json({
@@ -111,5 +114,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 		status: "manual",
 		paidCount: 0,
 		totalCount: 0,
+		isHosting: true,
 	});
 }
