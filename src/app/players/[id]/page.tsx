@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ETRANSFER_EMAIL } from "@/lib/utils";
 
 interface PlayerBasic {
 	userId: string;
@@ -76,7 +77,9 @@ export default function PlayerProfilePage({
 			const all = (await allRes.json()) as PlayerBasic[];
 			const idx = all.findIndex((p) => p.userId === params.id);
 			setPrevPlayerId(idx > 0 ? all[idx - 1].userId : null);
-			setNextPlayerId(idx >= 0 && idx < all.length - 1 ? all[idx + 1].userId : null);
+			setNextPlayerId(
+				idx >= 0 && idx < all.length - 1 ? all[idx + 1].userId : null,
+			);
 		}
 		setLoading(false);
 	}, [params.id]);
@@ -182,7 +185,12 @@ export default function PlayerProfilePage({
 	const copyReminder = async () => {
 		if (!player) return;
 		const owed = Math.abs(player.balance).toFixed(2);
-		const unpaidRuns = player.runs.filter((r) => !r.paid && r.startDate != null && r.startDate <= new Date().toISOString());
+		const unpaidRuns = player.runs.filter(
+			(r) =>
+				!r.paid &&
+				r.startDate != null &&
+				r.startDate <= new Date().toISOString(),
+		);
 		const runCount = unpaidRuns.length;
 		const lines = unpaidRuns.map((r) => {
 			const date = r.startDate
@@ -199,7 +207,7 @@ export default function PlayerProfilePage({
 			"",
 			...lines,
 			"",
-			`Let me know if any of these are incorrect and etransfer me at kevingeng33@gmail.com when you get the chance! Thanks :)`,
+			`Let me know if any of these are incorrect and etransfer me at ${ETRANSFER_EMAIL} when you get the chance! Thanks :)`,
 		].join("\n");
 		await navigator.clipboard.writeText(msg);
 		setCopied(true);
@@ -224,7 +232,10 @@ export default function PlayerProfilePage({
 				) : (
 					<span />
 				)}
-				<Link href="/players" className="text-xs text-muted-foreground hover:text-foreground">
+				<Link
+					href="/players"
+					className="text-xs text-muted-foreground hover:text-foreground"
+				>
 					All players
 				</Link>
 				{nextPlayerId ? (
@@ -711,10 +722,16 @@ function MobileRunCard({
 			{run.plusOnes.length > 0 && (
 				<div className="border-t pt-2 mt-1 space-y-2">
 					{run.plusOnes.map((p1) => (
-						<div key={p1.userId} className="pl-3 border-l-2 border-muted space-y-1">
+						<div
+							key={p1.userId}
+							className="pl-3 border-l-2 border-muted space-y-1"
+						>
 							<div className="flex items-center justify-between gap-2">
 								<span className="text-xs text-muted-foreground">+1</span>
-								<Badge variant={p1.paid ? "default" : "outline"} className="text-xs">
+								<Badge
+									variant={p1.paid ? "default" : "outline"}
+									className="text-xs"
+								>
 									{p1.paid ? "paid" : "unpaid"}
 								</Badge>
 							</div>

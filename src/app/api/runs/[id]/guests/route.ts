@@ -1,5 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
-import { queries } from "@/lib/db";
+import { queries, DEFAULT_SPLIT_COUNT } from "@/lib/db";
 
 export async function POST(
 	req: Request,
@@ -42,7 +44,7 @@ export async function POST(
 	const runHasHappened =
 		run?.startDate != null && run.startDate <= new Date().toISOString();
 	if (runHasHappened && run?.totalCost != null) {
-		const amount = run.totalCost / (run.splitCount ?? 12);
+		const amount = run.totalCost / (run.splitCount ?? DEFAULT_SPLIT_COUNT);
 		queries.upsertPaymentOwed.run({ eventId: params.id, userId, amount });
 		// Auto-apply credit if prior balance covers the cost
 		const row = queries.getPlayerBalanceExcludingRun.get(userId, params.id) as {

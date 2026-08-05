@@ -1,6 +1,8 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
 import { getEventGuests } from "@keg/partiful-api";
-import { queries } from "@/lib/db";
+import { queries, DEFAULT_SPLIT_COUNT } from "@/lib/db";
 
 export async function POST(
 	_req: Request,
@@ -13,13 +15,13 @@ export async function POST(
 		run?.startDate != null && run.startDate <= new Date().toISOString();
 
 	let totalCost: number | null = run?.totalCost ?? null;
-	let splitCount: number = run?.splitCount ?? 12;
+	let splitCount: number = run?.splitCount ?? DEFAULT_SPLIT_COUNT;
 
 	if (runHasHappened && totalCost == null) {
 		const last = queries.getLastRunCost.get() as any;
 		if (last?.totalCost != null) {
 			totalCost = last.totalCost;
-			splitCount = last.splitCount ?? 12;
+			splitCount = last.splitCount ?? DEFAULT_SPLIT_COUNT;
 			queries.updateRunCost.run({ eventId: params.id, totalCost, splitCount });
 		}
 	}
@@ -117,15 +119,18 @@ export async function POST(
 		}
 	}
 
-	// Auto-apply credit: mark paid for any GOING guest whose prior balance covers the cost
 	if (runHasHappened && amountOwed > 0) {
+		const priorBalances = new Map<string, number>(
+			(
+				queries.getPlayerBalancesExcludingRun.all(params.id) as {
+					userId: string;
+					balance: number;
+				}[]
+			).map((b) => [b.userId, b.balance]),
+		);
 		for (const guest of guests) {
 			if (guest.status !== "GOING" || guest.userId === hostUserId) continue;
-			const row = queries.getPlayerBalanceExcludingRun.get(
-				guest.userId,
-				params.id,
-			) as { balance: number };
-			if (row.balance >= amountOwed) {
+			if ((priorBalances.get(guest.userId) ?? 0) >= amountOwed) {
 				queries.markHostPaid.run({
 					amount: amountOwed,
 					amountPaid: amountOwed,

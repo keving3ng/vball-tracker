@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ETRANSFER_EMAIL } from "@/lib/utils";
 
 interface PlayerStats {
 	userId: string;
@@ -18,7 +19,7 @@ type SortDir = "asc" | "desc";
 
 function buildReminder(balance: number, owingRuns: number): string {
 	const owed = Math.abs(balance).toFixed(2);
-	return `Hey, you owe $${owed} from ${owingRuns} run${owingRuns !== 1 ? "s" : ""}. Please etransfer me at kevingeng33@gmail.com when you get the chance!`;
+	return `Hey, you owe $${owed} from ${owingRuns} run${owingRuns !== 1 ? "s" : ""}. Please etransfer me at ${ETRANSFER_EMAIL} when you get the chance!`;
 }
 
 function fmtDate(iso: string | null): string {

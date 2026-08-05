@@ -71,12 +71,23 @@ for (const sql of [
 	`ALTER TABLE attendance ADD COLUMN plus_one_of TEXT`,
 	`ALTER TABLE players ADD COLUMN is_anon_plus_one INTEGER DEFAULT 0`,
 	`ALTER TABLE runs ADD COLUMN displayTitle TEXT`,
-	`ALTER TABLE runs ADD COLUMN isHosting INTEGER DEFAULT 1`, // NEW
+	`ALTER TABLE runs ADD COLUMN isHosting INTEGER DEFAULT 1`,
+	`CREATE INDEX IF NOT EXISTS idx_attendance_userId ON attendance(userId)`,
+	`CREATE INDEX IF NOT EXISTS idx_payments_userId ON payments(userId)`,
+	`CREATE INDEX IF NOT EXISTS idx_payments_eventId ON payments(eventId)`,
+	`CREATE INDEX IF NOT EXISTS idx_runs_startDate ON runs(startDate)`,
+	`CREATE INDEX IF NOT EXISTS idx_audit_log_changedAt ON payment_audit_log(changedAt)`,
+	`CREATE INDEX IF NOT EXISTS idx_audit_log_eventId ON payment_audit_log(eventId)`,
 ]) {
 	try {
 		db.exec(sql);
-	} catch {}
+	} catch (e) {
+		if (!(e instanceof Error) || !e.message.includes("duplicate column name"))
+			throw e;
+	}
 }
+
+export const DEFAULT_SPLIT_COUNT = 12;
 
 export interface Player {
 	userId: string;
@@ -287,7 +298,7 @@ export const queries = {
 	getPlayerProfile: db.prepare(`
     SELECT
       p.userId, p.name, p.displayName, p.notes,
-      r.eventId, r.title, r.startDate, r.totalCost, r.splitCount,
+      r.eventId, r.title, r.displayTitle, r.startDate, r.totalCost, r.splitCount,
       pay.amount, pay.amountPaid, pay.method, pay.note
     FROM players p
     LEFT JOIN attendance a ON a.userId = p.userId AND a.rsvpStatus = 'GOING'

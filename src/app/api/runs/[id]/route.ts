@@ -1,5 +1,7 @@
+export const dynamic = "force-dynamic";
+
 import { NextResponse } from "next/server";
-import { queries } from "@/lib/db";
+import { queries, DEFAULT_SPLIT_COUNT } from "@/lib/db";
 
 export async function GET(
 	_req: Request,
@@ -10,7 +12,7 @@ export async function GET(
 		return NextResponse.json({ error: "Run not found" }, { status: 404 });
 
 	const r0 = rows[0];
-	const splitCount = r0.splitCount ?? 12;
+	const splitCount = r0.splitCount ?? DEFAULT_SPLIT_COUNT;
 	const costPerHead =
 		r0.totalCost != null ? r0.totalCost / splitCount : (r0.costPerHead ?? null);
 
@@ -74,7 +76,7 @@ export async function PATCH(
 	}
 	if (body.totalCost !== undefined || body.splitCount !== undefined) {
 		const newTotalCost: number | null = body.totalCost ?? null;
-		const newSplitCount: number = body.splitCount ?? 12;
+		const newSplitCount: number = body.splitCount ?? DEFAULT_SPLIT_COUNT;
 		queries.updateRunCost.run({
 			eventId: params.id,
 			totalCost: newTotalCost,
@@ -106,14 +108,17 @@ export async function PATCH(
 					userId: run.hostUserId,
 				});
 			}
-			// Auto-apply credit for non-host players with sufficient prior balance
+			const priorBalances = new Map<string, number>(
+				(
+					queries.getPlayerBalancesExcludingRun.all(params.id) as {
+						userId: string;
+						balance: number;
+					}[]
+				).map((b) => [b.userId, b.balance]),
+			);
 			for (const a of going) {
 				if (a.userId === run?.hostUserId) continue;
-				const row = queries.getPlayerBalanceExcludingRun.get(
-					a.userId,
-					params.id,
-				) as { balance: number };
-				if (row.balance >= amountOwed) {
+				if ((priorBalances.get(a.userId) ?? 0) >= amountOwed) {
 					queries.markHostPaid.run({
 						amount: amountOwed,
 						amountPaid: amountOwed,
@@ -147,7 +152,8 @@ export async function PATCH(
 		queries.updateRunHost.run({ hostUserId: newHostId, eventId: params.id });
 
 		if (newHostId && current?.totalCost != null && current.totalCost > 0) {
-			const costPerHead = current.totalCost / (current.splitCount ?? 12);
+			const costPerHead =
+				current.totalCost / (current.splitCount ?? DEFAULT_SPLIT_COUNT);
 			queries.markHostPaid.run({
 				amount: costPerHead,
 				amountPaid: costPerHead,

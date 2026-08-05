@@ -24,7 +24,7 @@ src/
       players/route.ts          # GET player stats
   lib/
     db.ts         # SQLite schema init + prepared queries
-    utils.ts      # shadcn cn() utility
+    utils.ts      # cn() utility + ETRANSFER_EMAIL constant
 ```
 
 ## Environment Variables
@@ -57,6 +57,8 @@ DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
 - **Next.js static generation of API routes**: App Router statically generates API routes with no dynamic segments at build time (actually calls the handler). Any route that hits an external API or DB must have `export const dynamic = 'force-dynamic'` at the top, otherwise `next build` will call it and fail without runtime env vars.
 - **DB location**: `data/vball.db` (gitignored). `DATA_DIR=./data` locally, `/data` in Docker.
 - **Event filtering**: `/api/runs` filters Partiful events to volleyball only via `/vball|volley|🏐/i`.
+- **Run display titles**: Any SQL query returning run titles must select both `r.title` AND `r.displayTitle`. Resolved name is `r.displayTitle ?? r.title` in JS (or `COALESCE(r.displayTitle, r.title)` in SQL). Missing `r.displayTitle` silently shows the Partiful title instead of the custom one.
+- **Discord notification**: `DISCORD_WEBHOOK_URL` secret may be unset — "Notify Discord" step uses `continue-on-error: true` intentionally. CI failures from this step are not real deploy failures.
 
 ## Database Schema
 
@@ -107,3 +109,5 @@ docker compose up --build                      # Build + run in Docker
 - Tailwind v3 + shadcn v4 (CSS variables via oklch)
 - No `"type": "module"` in package.json (better-sqlite3 requires CJS)
 - `next.config.js` uses `experimental.serverComponentsExternalPackages` for better-sqlite3 (Next.js 14 syntax)
+- Named constants: `DEFAULT_SPLIT_COUNT` exported from `db.ts` (default split = 12); `ETRANSFER_EMAIL` exported from `utils.ts`. Use these instead of hardcoding.
+- Batch balance lookup: use `queries.getPlayerBalancesExcludingRun` (all users, build a Map) inside loops — not `queries.getPlayerBalanceExcludingRun` (single user) which causes N+1.

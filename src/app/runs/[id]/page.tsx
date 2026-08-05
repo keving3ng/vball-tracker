@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cn, ETRANSFER_EMAIL } from "@/lib/utils";
 import type { PaymentAuditAction } from "@/lib/db";
 import Link from "next/link";
 
@@ -288,7 +288,7 @@ export default function RunPage({ params }: { params: { id: string } }) {
 		if (!run) return;
 		const price =
 			run.costPerHead != null ? `$${run.costPerHead.toFixed(2)}` : "the cost";
-		const msg = `Hi all, please etransfer kevingeng33@gmail.com ${price}! Thanks!`;
+		const msg = `Hi all, please etransfer ${ETRANSFER_EMAIL} ${price}! Thanks!`;
 		await navigator.clipboard.writeText(msg);
 		setReminderCopied(true);
 		setTimeout(() => setReminderCopied(false), 2000);
