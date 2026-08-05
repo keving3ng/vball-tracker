@@ -5,9 +5,13 @@ import { getUpcomingEvents, getPastEvents } from "@keg/partiful-api";
 import { queries } from "@/lib/db";
 
 const VBALL_RE = /vball|volley|🏐/i;
+const KEVIN_PARTIFUL_USER_ID = "uFItaBptDMVmeXFHhw1Rhma8FOq1";
 
-function isVballEvent(event: { title?: string }) {
-	return VBALL_RE.test(event.title ?? "");
+function isVballEvent(event: { title?: string; ownerIds?: string[] }) {
+	return (
+		VBALL_RE.test(event.title ?? "") &&
+		(event.ownerIds ?? []).includes(KEVIN_PARTIFUL_USER_ID)
+	);
 }
 
 interface PartifulEventRaw {
@@ -15,6 +19,7 @@ interface PartifulEventRaw {
 	title: string;
 	startDate: string | null;
 	status: string;
+	ownerIds?: string[];
 }
 
 interface EnrichedEvent extends PartifulEventRaw {
