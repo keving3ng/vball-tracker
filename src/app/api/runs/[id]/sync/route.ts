@@ -14,6 +14,10 @@ export async function POST(
 	const runHasHappened =
 		run?.startDate != null && run.startDate <= new Date().toISOString();
 
+	// A cancelled run (isHosting = 0) keeps its guest list and past payments,
+	// but stops generating any new charges.
+	const isCancelled = run?.isHosting === 0;
+
 	let totalCost: number | null = run?.totalCost ?? null;
 	let splitCount: number = run?.splitCount ?? DEFAULT_SPLIT_COUNT;
 
@@ -26,7 +30,21 @@ export async function POST(
 		}
 	}
 
-	const amountOwed = totalCost != null ? totalCost / splitCount : 0;
+	// Split the cost across who is actually going. guest.count is Partiful's headcount
+	// including the guest themselves, so this already accounts for +1s. Overwrites any
+	// manually entered split count.
+	const attendeeCount = guests
+		.filter((g) => g.status === "GOING")
+		.reduce((sum, g) => sum + (g.count ?? 1), 0);
+	if (!isCancelled && attendeeCount > 0) {
+		splitCount = attendeeCount;
+		queries.updateSplitCount.run(attendeeCount, params.id);
+	}
+
+	const amountOwed =
+		!isCancelled && totalCost != null && splitCount > 0
+			? totalCost / splitCount
+			: 0;
 
 	for (const guest of guests) {
 		queries.upsertPlayer.run({ userId: guest.userId, name: guest.name });

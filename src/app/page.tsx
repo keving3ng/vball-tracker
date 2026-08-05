@@ -162,7 +162,8 @@ export default function Dashboard() {
 						onChange={(e) => setShowAllRuns(e.target.checked)}
 						className="accent-foreground"
 					/>
-					Show {hiddenCount} run{hiddenCount !== 1 ? "s" : ""} I&apos;m not hosting
+					Show {hiddenCount} cancelled / not hosting run
+					{hiddenCount !== 1 ? "s" : ""}
 				</label>
 			)}
 

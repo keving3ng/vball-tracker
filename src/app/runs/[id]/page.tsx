@@ -395,7 +395,10 @@ export default function RunPage({ params }: { params: { id: string } }) {
 				) : (
 					<span />
 				)}
-				<Link href="/" className="text-xs text-muted-foreground hover:text-foreground">
+				<Link
+					href="/"
+					className="text-xs text-muted-foreground hover:text-foreground"
+				>
 					All runs
 				</Link>
 				{nextRunId ? (
@@ -479,11 +482,11 @@ export default function RunPage({ params }: { params: { id: string } }) {
 						size="sm"
 						title={
 							run.isHosting
-								? "I'm hosting this run — mark as just attending instead"
-								: "Just attending — mark as a run I'm hosting"
+								? "This run charges its guests — mark as cancelled / not hosting instead"
+								: "This run charges nobody — mark as a run I'm hosting instead"
 						}
 					>
-						{run.isHosting ? "🏠 Hosting" : "Not hosting"}
+						{run.isHosting ? "🏠 Hosting" : "Cancelled / not hosting"}
 					</Button>
 					{run.isHosting && run.costPerHead != null && (
 						<Button onClick={copyEventReminder} variant="outline" size="sm">
@@ -503,6 +506,16 @@ export default function RunPage({ params }: { params: { id: string } }) {
 					</Button>
 				</div>
 			</div>
+
+			{!run.isHosting && (
+				<div className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
+					<span className="font-medium text-foreground">
+						Cancelled / not hosting.
+					</span>{" "}
+					Nobody is charged for this run and it is left out of player balances
+					and stats. Guests still sync. Payments already recorded are kept.
+				</div>
+			)}
 
 			{/* Compact stats */}
 			<div className="flex gap-5 text-sm">
@@ -1068,6 +1081,10 @@ function CostSection({
 			<Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
 				✕
 			</Button>
+			<p className="w-full text-xs text-muted-foreground">
+				Split count is set to the number of guests going and is updated on every
+				sync.
+			</p>
 		</div>
 	);
 }

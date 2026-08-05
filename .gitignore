@@ -8,3 +8,4 @@ data/
 *.db-wal
 .worktrees/
 tsconfig.tsbuildinfo
+.claude/settings.local.json

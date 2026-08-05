@@ -7,11 +7,19 @@ import { queries } from "@/lib/db";
 const VBALL_RE = /vball|volley|🏐/i;
 const KEVIN_PARTIFUL_USER_ID = "uFItaBptDMVmeXFHhw1Rhma8FOq1";
 
+// Partiful's exact cancelled status string is unconfirmed (only PUBLISHED observed).
+// Substring match covers CANCELLED / CANCELED / EVENT_CANCELLED.
+const CANCELLED_RE = /cancel/i;
+
 function isVballEvent(event: { title?: string; ownerIds?: string[] }) {
 	return (
 		VBALL_RE.test(event.title ?? "") &&
 		(event.ownerIds ?? []).includes(KEVIN_PARTIFUL_USER_ID)
 	);
+}
+
+function isCancelledEvent(event: { status?: string }) {
+	return CANCELLED_RE.test(event.status ?? "");
 }
 
 interface PartifulEventRaw {
@@ -73,6 +81,29 @@ export async function GET() {
 	}[];
 	const paymentMap = new Map(paymentSummaryRows.map((s) => [s.eventId, s]));
 
+	// Cancelled Partiful events are marked not-hosting so they stop generating charges.
+	// One-way only — never flips a run back to hosting, since a run can be not-hosting
+	// for reasons unrelated to cancellation.
+	const markCancelledRuns = (events: PartifulEventRaw[]) => {
+		for (const event of events) {
+			if (!isCancelledEvent(event)) continue;
+			const meta = runMetaMap.get(event.id);
+			if (!meta || meta.isHosting === 0) continue;
+			queries.updateRunHosting.run({ eventId: event.id, isHosting: 0 });
+			meta.isHosting = 0;
+		}
+	};
+
+	const upcomingVball = (
+		(upcoming.result.data.upcomingEvents ?? []) as PartifulEventRaw[]
+	).filter(isVballEvent);
+	const pastVball = (
+		(past.result.data.pastEvents ?? []) as PartifulEventRaw[]
+	).filter(isVballEvent);
+
+	markCancelledRuns(upcomingVball);
+	markCancelledRuns(pastVball);
+
 	const enrich = (event: PartifulEventRaw): EnrichedEvent => ({
 		...event,
 		displayTitle: runMetaMap.get(event.id)?.displayTitle ?? null,
@@ -84,16 +115,8 @@ export async function GET() {
 	});
 
 	return NextResponse.json({
-		upcoming: [
-			...(upcoming.result.data.upcomingEvents ?? [])
-				.filter(isVballEvent)
-				.map(enrich),
-			...upcomingManual.map(enrich),
-		],
-		past: [
-			...(past.result.data.pastEvents ?? []).filter(isVballEvent).map(enrich),
-			...pastManual.map(enrich),
-		],
+		upcoming: [...upcomingVball.map(enrich), ...upcomingManual.map(enrich)],
+		past: [...pastVball.map(enrich), ...pastManual.map(enrich)],
 	});
 }
 

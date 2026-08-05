@@ -474,16 +474,23 @@ export const queries = {
 
 	// Returns a player's balance across all runs except the given eventId.
 	// Used to detect credit that can auto-cover a new run.
+	// Excludes non-hosted/cancelled runs, which carry no real charges.
 	getPlayerBalanceExcludingRun: db.prepare(`
-    SELECT COALESCE(SUM(COALESCE(amountPaid, 0) - COALESCE(amount, 0)), 0) AS balance
-    FROM payments WHERE userId = ? AND eventId != ?
+    SELECT COALESCE(SUM(COALESCE(pay.amountPaid, 0) - COALESCE(pay.amount, 0)), 0) AS balance
+    FROM payments pay
+    JOIN runs r ON r.eventId = pay.eventId
+    WHERE pay.userId = ? AND pay.eventId != ?
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
   `),
 
 	// Batch version: all players' prior balances excluding a specific run.
 	getPlayerBalancesExcludingRun: db.prepare(`
-    SELECT userId, COALESCE(SUM(COALESCE(amountPaid, 0) - COALESCE(amount, 0)), 0) AS balance
-    FROM payments WHERE eventId != ?
-    GROUP BY userId
+    SELECT pay.userId, COALESCE(SUM(COALESCE(pay.amountPaid, 0) - COALESCE(pay.amount, 0)), 0) AS balance
+    FROM payments pay
+    JOIN runs r ON r.eventId = pay.eventId
+    WHERE pay.eventId != ?
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
+    GROUP BY pay.userId
   `),
 
 	insertPaymentAuditLog: db.prepare(`
