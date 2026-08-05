@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ETRANSFER_EMAIL } from "@/lib/utils";
+import { buildOwedReminder } from "@/lib/utils";
 
 interface PlayerStats {
 	userId: string;
@@ -16,11 +16,6 @@ interface PlayerStats {
 
 type SortKey = "name" | "runs" | "balance" | "lastAttended";
 type SortDir = "asc" | "desc";
-
-function buildReminder(balance: number, owingRuns: number): string {
-	const owed = Math.abs(balance).toFixed(2);
-	return `Hey, you owe $${owed} from ${owingRuns} run${owingRuns !== 1 ? "s" : ""}. Please etransfer me at ${ETRANSFER_EMAIL} when you get the chance!`;
-}
 
 function fmtDate(iso: string | null): string {
 	if (!iso) return "—";
@@ -50,7 +45,8 @@ export default function PlayersPage() {
 	}, []);
 
 	async function copyReminder(p: PlayerStats) {
-		await navigator.clipboard.writeText(buildReminder(p.balance, p.owingRuns));
+		// No per-run breakdown on this page — the profile page itemizes it.
+		await navigator.clipboard.writeText(buildOwedReminder(p.balance, []));
 		setCopiedId(p.userId);
 		setTimeout(() => setCopiedId((id) => (id === p.userId ? null : id)), 2000);
 	}
@@ -174,7 +170,11 @@ export default function PlayersPage() {
 								col="lastAttended"
 								className="text-center"
 							/>
-							<SortHeader label="Balance" col="balance" className="text-center" />
+							<SortHeader
+								label="Balance"
+								col="balance"
+								className="text-center"
+							/>
 							<th className="px-4 py-2"></th>
 						</tr>
 					</thead>

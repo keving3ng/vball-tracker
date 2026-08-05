@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ETRANSFER_EMAIL } from "@/lib/utils";
+import { buildOwedReminder } from "@/lib/utils";
 
 interface PlayerBasic {
 	userId: string;
@@ -184,14 +184,12 @@ export default function PlayerProfilePage({
 
 	const copyReminder = async () => {
 		if (!player) return;
-		const owed = Math.abs(player.balance).toFixed(2);
 		const unpaidRuns = player.runs.filter(
 			(r) =>
 				!r.paid &&
 				r.startDate != null &&
 				r.startDate <= new Date().toISOString(),
 		);
-		const runCount = unpaidRuns.length;
 		const lines = unpaidRuns.map((r) => {
 			const date = r.startDate
 				? new Date(r.startDate).toLocaleDateString("en-CA", {
@@ -202,13 +200,7 @@ export default function PlayerProfilePage({
 				: "Unknown date";
 			return `• ${date} ($${r.amountOwed.toFixed(2)})`;
 		});
-		const msg = [
-			`Hey, you owe $${owed} from ${runCount} run${runCount !== 1 ? "s" : ""}:`,
-			"",
-			...lines,
-			"",
-			`Let me know if any of these are incorrect and etransfer me at ${ETRANSFER_EMAIL} when you get the chance! Thanks :)`,
-		].join("\n");
+		const msg = buildOwedReminder(player.balance, lines);
 		await navigator.clipboard.writeText(msg);
 		setCopied(true);
 		setTimeout(() => setCopied(false), 2000);
