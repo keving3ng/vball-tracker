@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { GmailReceipts } from "@/components/gmail-receipts";
 
 interface UnpaidRun {
 	eventId: string;
@@ -329,6 +330,7 @@ export default function ReconcilePage() {
 		return (
 			<div className="space-y-4">
 				<h1 className="text-2xl font-bold">Reconcile Payments</h1>
+				<GmailReceipts />
 				<p className="text-sm text-muted-foreground">
 					Paste your bank transaction log. The tool parses Interac e-Transfer
 					entries, matches names to players, and suggests which runs each payment

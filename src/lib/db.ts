@@ -57,6 +57,47 @@ db.exec(`
     amountPaid REAL,
     changedAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS gmail_connection (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    email TEXT NOT NULL,
+    encryptedRefreshToken TEXT NOT NULL,
+    connectedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS gmail_oauth_states (
+    state TEXT PRIMARY KEY,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS gmail_sender_mappings (
+    senderName TEXT PRIMARY KEY,
+    userId TEXT NOT NULL REFERENCES players(userId),
+    updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS gmail_receipts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gmailMessageId TEXT NOT NULL UNIQUE,
+    senderName TEXT NOT NULL,
+    amount REAL NOT NULL,
+    transferDate TEXT NOT NULL,
+    receivedAt TEXT NOT NULL,
+    subject TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    unallocatedAmount REAL NOT NULL,
+    importedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS gmail_receipt_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    receiptId INTEGER NOT NULL REFERENCES gmail_receipts(id),
+    eventId TEXT NOT NULL,
+    userId TEXT NOT NULL,
+    amount REAL NOT NULL,
+    createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(receiptId, eventId, userId)
+  );
 `);
 
 // Additive schema migrations — safe to run on every startup
@@ -78,6 +119,8 @@ for (const sql of [
 	`CREATE INDEX IF NOT EXISTS idx_runs_startDate ON runs(startDate)`,
 	`CREATE INDEX IF NOT EXISTS idx_audit_log_changedAt ON payment_audit_log(changedAt)`,
 	`CREATE INDEX IF NOT EXISTS idx_audit_log_eventId ON payment_audit_log(eventId)`,
+	`CREATE INDEX IF NOT EXISTS idx_gmail_receipts_status ON gmail_receipts(status)`,
+	`CREATE INDEX IF NOT EXISTS idx_gmail_allocations_receipt ON gmail_receipt_allocations(receiptId)`,
 ]) {
 	try {
 		db.exec(sql);
@@ -254,6 +297,63 @@ export const queries = {
 	upsertSetting: db.prepare(`
     INSERT INTO settings (key, value) VALUES (@key, @value)
     ON CONFLICT(key) DO UPDATE SET value=excluded.value
+  `),
+
+	getEarliestRunDate: db.prepare(`
+    SELECT MIN(startDate) AS startDate FROM runs WHERE startDate IS NOT NULL
+  `),
+	getGmailConnection: db.prepare(`SELECT * FROM gmail_connection WHERE id = 1`),
+	upsertGmailConnection: db.prepare(`
+    INSERT INTO gmail_connection (id, email, encryptedRefreshToken, connectedAt)
+    VALUES (1, @email, @encryptedRefreshToken, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET email=excluded.email,
+      encryptedRefreshToken=excluded.encryptedRefreshToken, connectedAt=datetime('now')
+  `),
+	deleteGmailConnection: db.prepare(`DELETE FROM gmail_connection WHERE id = 1`),
+	insertGmailOauthState: db.prepare(`INSERT INTO gmail_oauth_states (state) VALUES (?)`),
+	consumeGmailOauthState: db.prepare(`DELETE FROM gmail_oauth_states WHERE state = ?`),
+	deleteExpiredGmailOauthStates: db.prepare(`
+    DELETE FROM gmail_oauth_states WHERE createdAt < datetime('now', '-15 minutes')
+  `),
+	getGmailSenderMapping: db.prepare(`
+    SELECT m.senderName, m.userId, COALESCE(p.displayName, p.name) AS playerName
+    FROM gmail_sender_mappings m JOIN players p ON p.userId = m.userId
+    WHERE m.senderName = ?
+  `),
+	upsertGmailSenderMapping: db.prepare(`
+    INSERT INTO gmail_sender_mappings (senderName, userId, updatedAt)
+    VALUES (@senderName, @userId, datetime('now'))
+    ON CONFLICT(senderName) DO UPDATE SET userId=excluded.userId, updatedAt=datetime('now')
+  `),
+	getGmailReceipts: db.prepare(`
+    SELECT r.*, m.userId AS mappedUserId, COALESCE(p.displayName, p.name) AS mappedPlayerName
+    FROM gmail_receipts r
+    LEFT JOIN gmail_sender_mappings m ON m.senderName = r.senderName
+    LEFT JOIN players p ON p.userId = m.userId
+    ORDER BY r.transferDate DESC, r.id DESC
+  `),
+	getGmailReceipt: db.prepare(`SELECT * FROM gmail_receipts WHERE id = ?`),
+	insertGmailReceipt: db.prepare(`
+    INSERT OR IGNORE INTO gmail_receipts
+      (gmailMessageId, senderName, amount, transferDate, receivedAt, subject, unallocatedAmount)
+    VALUES (@gmailMessageId, @senderName, @amount, @transferDate, @receivedAt, @subject, @amount)
+  `),
+	insertGmailReceiptAllocation: db.prepare(`
+    INSERT INTO gmail_receipt_allocations (receiptId, eventId, userId, amount)
+    VALUES (@receiptId, @eventId, @userId, @amount)
+  `),
+	getGmailReceiptAllocatedTotal: db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) AS total FROM gmail_receipt_allocations WHERE receiptId = ?
+  `),
+	updateGmailReceiptAllocationState: db.prepare(`
+    UPDATE gmail_receipts SET unallocatedAmount=@unallocatedAmount, status=@status WHERE id=@id
+  `),
+	getOutstandingPayment: db.prepare(`
+    SELECT COALESCE(pay.amount, CASE WHEN r.totalCost IS NOT NULL THEN r.totalCost / COALESCE(r.splitCount, 12) ELSE 0 END) AS amountOwed
+    FROM attendance a JOIN runs r ON r.eventId = a.eventId
+    LEFT JOIN payments pay ON pay.eventId = a.eventId AND pay.userId = a.userId
+    WHERE a.eventId = ? AND a.userId = ? AND a.rsvpStatus = 'GOING' AND pay.amountPaid IS NULL
+      AND (r.isHosting IS NULL OR r.isHosting = 1)
   `),
 
 	getRunWithGuests: db.prepare(`
@@ -592,6 +692,59 @@ export const upsertPaymentWithAudit = db.transaction(
 			action: p.action,
 			amount: p.amount,
 			amountPaid: p.amountPaid,
+		});
+	},
+);
+
+export interface GmailReceiptAllocation {
+	eventId: string;
+	userId: string;
+	amountOwed: number;
+}
+
+// Applies a reviewed receipt atomically. A receipt can only pay whole, currently
+// unpaid fee rows; any remainder deliberately stays visible for later handling.
+export const applyGmailReceiptAllocations = db.transaction(
+	(receiptId: number, allocations: GmailReceiptAllocation[]) => {
+		const receipt = queries.getGmailReceipt.get(receiptId) as
+			| { amount: number; status: string; unallocatedAmount: number }
+			| undefined;
+		if (!receipt || receipt.status === "applied")
+			throw new Error("Receipt is unavailable or has already been applied");
+
+		let allocated = 0;
+		for (const allocation of allocations) {
+			const outstanding = queries.getOutstandingPayment.get(
+				allocation.eventId,
+				allocation.userId,
+			) as { amountOwed: number } | undefined;
+			if (!outstanding || Math.abs(outstanding.amountOwed - allocation.amountOwed) > 0.005)
+				throw new Error("One of the selected fees is no longer outstanding");
+			allocated += allocation.amountOwed;
+		}
+		const alreadyAllocated = (queries.getGmailReceiptAllocatedTotal.get(receiptId) as { total: number }).total;
+		if (allocated > receipt.amount - alreadyAllocated + 0.005)
+			throw new Error("Allocations exceed the receipt amount");
+
+		for (const allocation of allocations) {
+			upsertPaymentWithAudit({
+				eventId: allocation.eventId,
+				userId: allocation.userId,
+				amount: allocation.amountOwed,
+				amountPaid: allocation.amountOwed,
+				paid: 1,
+				method: "etransfer_gmail",
+				note: `Gmail receipt #${receiptId}`,
+				action: "marked_paid",
+			});
+			queries.insertGmailReceiptAllocation.run({ receiptId, ...allocation, amount: allocation.amountOwed });
+		}
+
+		const totalAllocated = alreadyAllocated + allocated;
+		queries.updateGmailReceiptAllocationState.run({
+			id: receiptId,
+			unallocatedAmount: Math.max(0, receipt.amount - totalAllocated),
+			status: totalAllocated >= receipt.amount - 0.005 ? "applied" : "partial",
 		});
 	},
 );

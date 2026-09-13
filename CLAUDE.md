@@ -33,7 +33,27 @@ src/
 PARTIFUL_REFRESH_TOKEN=   # Firebase refresh token for Partiful auth
 FIREBASE_API_KEY=         # Firebase API key (AIzaSy...)
 DATA_DIR=./data           # Directory for vball.db (use /data in Docker)
+GOOGLE_GMAIL_CLIENT_ID=   # Google OAuth web-client ID for e-Transfer mailbox
+GOOGLE_GMAIL_CLIENT_SECRET=
+GOOGLE_GMAIL_REDIRECT_URI= # https://<stable-app-url>/api/gmail/callback
+GMAIL_TOKEN_ENCRYPTION_KEY= # base64-encoded 32-byte AES key
+GMAIL_ETRANSFER_LABEL=Vball Payments
+GMAIL_SYNC_SECRET=        # secret sent by the home-server cron job
 ```
+
+## Gmail e-Transfer reconciliation
+
+The Reconcile page can import Interac receipt emails without Tangerine credentials or Plaid. In Google Cloud, enable the Gmail API and create a Web application OAuth client whose redirect URI is `${GOOGLE_GMAIL_REDIRECT_URI}`. Add the mailbox as a test user if the consent screen is in testing mode.
+
+Create a Gmail filter that recognizes legitimate Interac e-Transfer receipt mail and applies the `Vball Payments` label (or the label in `GMAIL_ETRANSFER_LABEL`). The app requests `gmail.readonly` and only imports messages carrying that label; it never creates or edits Gmail filters. It additionally verifies that imported messages are from an `interac.ca` address and have an Interac e-Transfer subject.
+
+After connecting Gmail on `/reconcile`, the app backfills from the earliest dated run in SQLite. Add a host cron job to import future mail every 10 minutes:
+
+```cron
+*/10 * * * * curl -fsS -X POST -H 'x-gmail-sync-secret: <GMAIL_SYNC_SECRET>' http://127.0.0.1:3000/api/gmail/sync >/dev/null
+```
+
+The cron endpoint only imports receipts; it never marks payments paid. Every payment allocation remains in the Reconcile review queue until approved.
 
 `.env` is gitignored. See `.env.example`.
 
