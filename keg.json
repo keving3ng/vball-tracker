@@ -17,7 +17,7 @@
   ],
   "requirements": {
     "container_port": 3000,
-    "health_path": "/",
+    "health_path": "/readyz",
     "persistent": true,
     "user": "1001:65533"
   }
