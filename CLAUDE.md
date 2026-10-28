@@ -81,7 +81,6 @@ The cron endpoint only imports receipts; it never marks payments paid. Every pay
 - **Cancelled runs = `isHosting = 0`**: there is no separate cancelled column. A run with `isHosting = 0` keeps its guest list and recorded payments but generates no new charges and is excluded from every financial query. Any new query that sums money MUST filter `(r.isHosting IS NULL OR r.isHosting = 1)` — missing it silently counts cancelled runs against player balances.
 - **Split count is derived, not configured**: `POST /api/runs/[id]/sync` overwrites `runs.splitCount` with the actual GOING headcount (`sum of guest.count`, which already includes +1s). Manual edits to the split field are overwritten on the next sync.
 - **Run display titles**: Any SQL query returning run titles must select both `r.title` AND `r.displayTitle`. Resolved name is `r.displayTitle ?? r.title` in JS (or `COALESCE(r.displayTitle, r.title)` in SQL). Missing `r.displayTitle` silently shows the Partiful title instead of the custom one.
-- **Discord notification**: `DISCORD_WEBHOOK_URL` secret may be unset — "Notify Discord" step uses `continue-on-error: true` intentionally. CI failures from this step are not real deploy failures.
 
 ## Database Schema
 
@@ -90,30 +89,22 @@ All prepared queries are on `queries` export from `db.ts`.
 
 ## Deploy Pipeline
 
-Push to `main` triggers GitHub Actions:
-1. Joins Tailscale (ephemeral key, `tag:ci`)
-2. Writes `.npmrc` on runner + runs `npm install --package-lock-only` to regenerate lockfile with `@keg/partiful-api` from Verdaccio — **never commit .npmrc**, IP injected from secret
-3. Configures Docker daemon + buildkitd for insecure Zot registry at `${TAILSCALE_IP}:5000`
-4. Builds multi-stage Docker image (passes `VERDACCIO_URL` as build arg so `npm ci` inside Docker can reach Verdaccio), pushes to Zot as `vball-tracker:latest` + `vball-tracker:<sha>`
-5. SSHes into Jonas → `docker stop/rm/run` (NOT restart)
-
-**Jonas runtime:**
-- Container: `vball-tracker`, port `3000:3000`
-- Data: `/mnt/user/appdata/vball-tracker:/data` (SQLite lives here)
-- Env: `/mnt/user/appdata/vball-tracker/.env` (PARTIFUL_REFRESH_TOKEN, FIREBASE_API_KEY, DATA_DIR=/data)
-
-**First-time bootstrap:** Create the env file on Jonas before the first deploy, then trigger CI:
+**Keg is the sole deployment authority** (`keg.json` holds the build allowlist). The legacy GitHub Actions deploy (`.github/workflows/deploy.yml`) is retired and disabled; pushing to `main` does NOT deploy.
 
 ```bash
-mkdir -p /mnt/user/appdata/vball-tracker
-printf 'PARTIFUL_REFRESH_TOKEN=%s\n' '<token>' > /mnt/user/appdata/vball-tracker/.env
-printf 'FIREBASE_API_KEY=%s\n' '<key>' >> /mnt/user/appdata/vball-tracker/.env
-printf 'DATA_DIR=/data\n' >> /mnt/user/appdata/vball-tracker/.env
+export WORKBENCH_TASK_ID=<ticket> KEG_AGENT=<unique-agent-name>
+~/code/jonas-config/scripts/keg context
+~/code/jonas-config/scripts/keg inspect
+~/code/jonas-config/scripts/keg deploy      # see jonas-config/services/keg-config/README.md for build/plan/deploy flow
 ```
 
-Use `printf` not heredoc (`cat <<EOF`) — heredoc termination is unreliable over SSH.
+Read `~/code/jonas-config/docs/KEG-WORKBENCH-CONTRACT.md` first. Do not hand-roll `docker run` over SSH.
 
-The `docker stop/rm` errors on first deploy ("No such container") are expected and handled by `|| true`.
+**Runtime (owned by Keg):**
+- Port `3000`, health check `GET /`, route `https://vball.keglab.dev`
+- Data: `/mnt/user/appdata/vball-tracker:/data` (SQLite `vball.db` + WAL). Cutover requires stopping the old writer, `PRAGMA wal_checkpoint(TRUNCATE)`, and a verified quiescent backup first. Never point a new empty volume at the service.
+- Env: `/mnt/user/appdata/vball-tracker/.env` (secrets by name: PARTIFUL_REFRESH_TOKEN, FIREBASE_API_KEY, DATA_DIR=/data, Gmail OAuth) — managed on the host, never committed.
+- `@keg/partiful-api` comes from private Verdaccio; the lockfile must resolve it for the Keg build (never commit `.npmrc`).
 
 ## Dev Commands
 
