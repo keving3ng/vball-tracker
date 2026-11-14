@@ -1,10 +1,11 @@
 {
   "name": "vball-tracker",
-  "version": "1.0.31",
+  "version": "1.0.32",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node --test tests/vball.test.js",
     "test:partiful": "npx tsx src/lib/test-partiful.ts"
   },
   "dependencies": {
