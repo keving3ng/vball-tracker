@@ -3,7 +3,15 @@ import Link from "next/link";
 import { version } from "../../package.json";
 import "./globals.css";
 
-export const metadata: Metadata = { title: "VBall Tracker" };
+export const metadata: Metadata = {
+	title: "VBall Tracker",
+	icons: {
+		icon: [
+			{ url: "/favicon.svg", type: "image/svg+xml" },
+			{ url: "/favicon.ico", sizes: "any" },
+		],
+	},
+};
 
 export default function RootLayout({
 	children,

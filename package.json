@@ -1,6 +1,6 @@
 {
   "name": "vball-tracker",
-  "version": "1.0.30",
+  "version": "1.0.31",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
