@@ -39,11 +39,48 @@ interface EnrichedEvent extends PartifulEventRaw {
 	isHosting: boolean;
 }
 
-export async function GET() {
-	const [upcoming, past] = await Promise.all([
-		getUpcomingEvents(),
-		getPastEvents(),
-	]);
+// Partiful event lists change rarely but cost a token refresh + two API calls
+// per fetch. Cache them in-process: fresh for TTL, stale copy served if Partiful
+// errors, concurrent callers share one in-flight request. `?refresh=1` bypasses.
+const PARTIFUL_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type PartifulLists = {
+	upcoming: Awaited<ReturnType<typeof getUpcomingEvents>>;
+	past: Awaited<ReturnType<typeof getPastEvents>>;
+};
+
+const partifulCache: {
+	value: PartifulLists | null;
+	fetchedAt: number;
+	inflight: Promise<PartifulLists> | null;
+} = { value: null, fetchedAt: 0, inflight: null };
+
+async function getPartifulLists(force: boolean): Promise<PartifulLists> {
+	const fresh =
+		partifulCache.value &&
+		Date.now() - partifulCache.fetchedAt < PARTIFUL_CACHE_TTL_MS;
+	if (!force && fresh) return partifulCache.value as PartifulLists;
+	if (partifulCache.inflight) return partifulCache.inflight;
+
+	partifulCache.inflight = Promise.all([getUpcomingEvents(), getPastEvents()])
+		.then(([upcoming, past]) => {
+			partifulCache.value = { upcoming, past };
+			partifulCache.fetchedAt = Date.now();
+			return partifulCache.value;
+		})
+		.catch((err) => {
+			if (partifulCache.value) return partifulCache.value; // serve stale
+			throw err;
+		})
+		.finally(() => {
+			partifulCache.inflight = null;
+		});
+	return partifulCache.inflight;
+}
+
+export async function GET(request: Request) {
+	const force = new URL(request.url).searchParams.get("refresh") === "1";
+	const { upcoming, past } = await getPartifulLists(force);
 
 	const manualRuns = (
 		queries.getManualRuns.all() as {

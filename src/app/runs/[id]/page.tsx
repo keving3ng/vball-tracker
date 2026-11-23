@@ -101,7 +101,9 @@ export default function RunPage({ params }: { params: { id: string } }) {
 	const sync = useCallback(async () => {
 		setSyncing(true);
 		try {
-			const runsData = await fetch("/api/runs").then((r) => r.json());
+			const runsData = await fetch("/api/runs?refresh=1").then((r) =>
+					r.json(),
+				);
 			const all = [...runsData.upcoming, ...runsData.past];
 			const event = all.find((e: any) => e.id === params.id);
 			if (event) {
